@@ -5,18 +5,34 @@ the [Vulkan Tutorial](https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Base_
 
 ## Requirements
 
-You must have GLFW, Vulkan-Headers, and Vulkan-Loader.
-You will also need `glslc`. To build with
-`gcc` you should be able to simply run
+You must have [GLFW][2], [Vulkan-Headers][3], and [Vulkan-Loader][4].
+You will also need a C99 or later compaitble C compiler and
+a [GLSL][5] to [SPIR-V][6] compiler.
+
+## Building
+
+To build with [gcc][7] and [glslc][8] you can build and run with
+the default setup.
 
 ```
 make
-./vulkan_hello_triangle
+./hello_triangle
 ```
 
-If you have some other compiler, then you can run
+If you have some other compiler, then you can modify the appropriate
+environment varialbes. For example, you can make a release build with
+[cproc][1] as follows.
 
 ```
-CC=mycc CFLAGS="-my-flag1 -my-flag2" make
-./vulkan_hello_triangle
+make CC=cproc CFLAGS="" COPTFLAGS="" CDBGFLAGS="-g"
+./hello_triangle
 ```
+
+[1]: https://sr.ht/~mcf/cproc/
+[2]: https://github.com/glfw/glfw
+[3]: https://github.com/KhronosGroup/Vulkan-Headers
+[4]: https://github.com/KhronosGroup/Vulkan-Loader
+[5]: https://www.khronos.org/opengl/wiki/Core_Language_(GLSL)
+[6]: https://registry.khronos.org/SPIR-V/
+[7]: https://gcc.gnu.org/
+[8]: https://github.com/google/shaderc

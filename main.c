@@ -13,6 +13,10 @@
 #define ARENA_SIZE 1024 * 1024 * 8
 #define MAX_FRAMES_IN_FLIGHT 2
 
+const char *VALIDATION_LAYERS[] = {
+    "VK_LAYER_KHRONOS_validation"
+};
+
 const char *DEVICE_EXTENSIONS[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
@@ -28,6 +32,11 @@ typedef struct {
     GLFWwindow *window;
 
     VkInstance instance;
+
+#ifdef ENABLE_VALIDATION_LAYERS
+    VkDebugUtilsMessengerEXT debug_messenger;
+#endif
+
     VkSurfaceKHR surface;
     VkPhysicalDevice physical_device;
     VkDevice device;
@@ -53,16 +62,17 @@ typedef struct {
     VkSemaphore render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
     VkFence in_flight_fences[MAX_FRAMES_IN_FLIGHT];
 
-    byte_slice_t base_arena;
+    byte_slice_t base_swapchain_arena;
     uint32_t current_frame;
     bool framebuffer_resized;
 } hello_triangle_app_t;
 
-enum {
+typedef enum {
     HT_ERROR_NONE = 0,
     HT_ERROR_MAIN_MALLOC,
     HT_ERROR_INIT_WINDOW,
-    HT_ERROR_CREATE_INSTANCE,
+    HT_ERROR_CREATE_INSTANCE_ALLOC,
+    HT_ERROR_CREATE_INSTANCE_CREATE,
     HT_ERROR_CREATE_SURFACE,
     HT_ERROR_FIND_QUEUE_FAMILIES_ALLOC,
     HT_ERROR_CHECK_DEVICE_EXTENSION_SUPPORT_ALLOC,
@@ -95,6 +105,11 @@ enum {
     HT_ERROR_CREATE_SYNC_OBJECTS_FENCE,
     HT_ERROR_DRAW_FRAME_SWAPCHAIN,
     HT_ERRROR_DRAW_FRAME_SUBMIT,
+#ifdef ENABLE_VALIDATION_LAYERS
+    HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
+    HT_ERROR_SETUP_DEBUG_MESSENGER,
+    HT_ERROR_CREATE_INSTANCE_VALIDATION,
+#endif
 } hello_triangle_error_t;
 
 void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
@@ -123,7 +138,148 @@ static int init_window(hello_triangle_app_t *app) {
     return 0;
 }
 
-static int create_instance(hello_triangle_app_t *app) {
+typedef result(bool) bool_result_t;
+
+#ifdef ENABLE_VALIDATION_LAYERS
+VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT message_type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void* user_data
+) {
+    fprintf(stderr, "validation layer: %s\n", callback_data->pMessage);
+
+    return VK_FALSE;
+}
+
+static bool_result_t check_validation_layer_support(
+    hello_triangle_app_t *app,
+    byte_slice_t temp_arena
+) {
+    uint32_t layer_count;
+    vkEnumerateInstanceLayerProperties(&layer_count, NULL);
+
+    VkLayerProperties *available_layers = aven_alloc(
+        &temp_arena,
+        layer_count * sizeof(*available_layers),
+        alignof(*available_layers)
+    );
+    if (available_layers == NULL) {
+        return (bool_result_t){
+            .error = HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC
+        };
+    }
+
+    vkEnumerateInstanceLayerProperties(&layer_count, available_layers);
+
+    for (size_t j = 0; j < countof(VALIDATION_LAYERS); ++j) {
+        bool layer_found = false;
+        for (uint32_t i = 0; i < layer_count; ++i) {
+            int diff = strcmp(
+                VALIDATION_LAYERS[j],
+                available_layers[i].layerName
+            );
+            if (diff == 0) {
+                layer_found = true;
+                break;
+            }
+        }
+        if (!layer_found) {
+            return (bool_result_t){ .payload = false };
+        }
+    }
+
+    return (bool_result_t){ .payload = true };
+}
+
+static VkResult create_debug_utils_messenger_ext(
+    VkInstance instance,
+    const VkDebugUtilsMessengerCreateInfoEXT *create_info,
+    const VkAllocationCallbacks *allocator,
+    VkDebugUtilsMessengerEXT *debug_messenger
+) {
+    PFN_vkCreateDebugUtilsMessengerEXT func =
+        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+            instance,
+            "vkCreateDebugUtilsMessengerEXT"
+        );
+    if (func == NULL) {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+
+    return func(instance, create_info, allocator, debug_messenger);
+}
+
+static void destroy_debug_utils_messenger_ext(
+    VkInstance instance,
+    VkDebugUtilsMessengerEXT debug_messenger,
+    const VkAllocationCallbacks *allocator
+) {
+    PFN_vkDestroyDebugUtilsMessengerEXT func = 
+        (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+            instance,
+            "vkDestroyDebugUtilsMessengerEXT"
+        );
+    assert(func != NULL);
+
+    func(instance, debug_messenger, allocator);
+}
+
+static VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info(void) {
+    return (VkDebugUtilsMessengerCreateInfoEXT){
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+        .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+        .pfnUserCallback = debug_callback,
+        .pUserData = NULL,
+    };
+}
+
+static int setup_debug_messenger(hello_triangle_app_t *app) {
+    VkDebugUtilsMessengerCreateInfoEXT create_info =
+        debug_messenger_create_info();
+
+    VkResult result = create_debug_utils_messenger_ext(
+        app->instance,
+        &create_info,
+        NULL,
+        &app->debug_messenger
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_SETUP_DEBUG_MESSENGER;
+    }
+    
+    return 0;
+}
+#endif
+
+static int create_instance(
+    hello_triangle_app_t *app,
+    byte_slice_t temp_arena
+) {
+#ifdef ENABLE_VALIDATION_LAYERS
+    {
+        bool_result_t layer_support_result = check_validation_layer_support(
+            app,
+            temp_arena
+        );
+        if (layer_support_result.error != 0) {
+            return layer_support_result.error;
+        }
+
+        if (!layer_support_result.payload) {
+            return HT_ERROR_CREATE_INSTANCE_VALIDATION;
+        }
+    }
+
+    VkDebugUtilsMessengerCreateInfoEXT debug_create_info =
+        debug_messenger_create_info();
+#endif
+
     VkApplicationInfo app_info = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = "Hello Triangle",
@@ -133,21 +289,43 @@ static int create_instance(hello_triangle_app_t *app) {
         .apiVersion = VK_API_VERSION_1_0,
     };
 
-    uint32_t glfw_extensions_len = 0;
-    const char **glfw_extensions_ptr = glfwGetRequiredInstanceExtensions(
-        &glfw_extensions_len
+    uint32_t glfw_extension_count = 0;
+    const char **glfw_extensions = glfwGetRequiredInstanceExtensions(
+        &glfw_extension_count
     );
+
+    uint32_t extension_count = glfw_extension_count + 1;
+    const char **extensions = aven_alloc(
+        &temp_arena, 
+        extension_count * sizeof(*extensions),
+        alignof(*extensions)
+    );
+    if (extensions == NULL) {
+        return HT_ERROR_CREATE_INSTANCE_ALLOC;
+    }
+
+    memcpy(
+        extensions,
+        glfw_extensions,
+        sizeof(*glfw_extensions) * glfw_extension_count
+    );
+    extensions[glfw_extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 
     VkInstanceCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &app_info,
-        .enabledExtensionCount = glfw_extensions_len,
-        .ppEnabledExtensionNames = glfw_extensions_ptr,
+        .enabledExtensionCount = extension_count,
+        .ppEnabledExtensionNames = extensions,
+#ifdef ENABLE_VALIDATION_LAYERS
+        .enabledLayerCount = countof(VALIDATION_LAYERS),
+        .ppEnabledLayerNames = VALIDATION_LAYERS,
+        .pNext = &debug_create_info,
+#endif
     };
 
     VkResult result = vkCreateInstance(&create_info, NULL, &app->instance);
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_INSTANCE;
+        return HT_ERROR_CREATE_INSTANCE_CREATE;
     }
     return 0;
 }
@@ -224,8 +402,6 @@ static queue_family_indices_result_t find_queue_families(
 
     return (queue_family_indices_result_t){ .payload = indices };
 }
-
-typedef result(bool) bool_result_t;
 
 static bool_result_t check_device_extension_support(
     VkPhysicalDevice device,
@@ -364,20 +540,6 @@ static bool_result_t is_device_suitable(
     VkPhysicalDevice device,
     byte_slice_t temp_arena
 ) {
-    //VkPhyiscalDeviceProperties device_properties = { 0 };
-    //vkGetPhyiscalDeviceProperties(device, &device_properties);
-
-    //if (device_properties.deviceType != VK_PHYISCAL_DEVICE_TYPE_DISCRETE_GPU) {
-    //    return false;
-    //}
-
-    //VkPhyiscalDeviceFeatures device_features = { 0 };
-    //vkGetPhyiscalDeviceFeatures(device, &device_features);
-
-    //if (!device_features.geometryShader) {
-    //    return false;
-    //}
-   
     queue_family_indices_t indices;
     {
         queue_family_indices_result_t result = find_queue_families(
@@ -609,7 +771,7 @@ static VkExtent2D choose_swap_extent(
 
 static int create_swapchain(
     hello_triangle_app_t *app,
-    byte_slice_t *perm_arena,
+    byte_slice_t *swapchain_arena,
     byte_slice_t temp_arena
 ) {
     swapchain_support_details_t swapchain_support;
@@ -704,7 +866,7 @@ static int create_swapchain(
     vkGetSwapchainImagesKHR(app->device, app->swapchain, &image_count, NULL);
 
     app->swapchain_images.ptr = aven_alloc(
-        perm_arena,
+        swapchain_arena,
         image_count * sizeof(*app->swapchain_images.ptr),
         alignof(*app->swapchain_images.ptr)
     );
@@ -728,11 +890,11 @@ static int create_swapchain(
 
 static int create_image_views(
     hello_triangle_app_t *app,
-    byte_slice_t *perm_arena,
+    byte_slice_t *swapchain_arena,
     byte_slice_t temp_arena
 ) {
     app->swapchain_image_views.ptr = aven_alloc(
-        perm_arena,
+        swapchain_arena,
         app->swapchain_images.len * sizeof(*app->swapchain_image_views.ptr),
         alignof(*app->swapchain_image_views.ptr)
     );
@@ -1033,7 +1195,7 @@ static int create_graphics_pipeline(
     };
 
     VkPipelineMultisampleStateCreateInfo multisampling = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .sampleShadingEnable = VK_FALSE,
         .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
         .minSampleShading = 1.0f,
@@ -1065,8 +1227,6 @@ static int create_graphics_pipeline(
         .blendConstants = { 0.0f, 0.0f, 0.0f, 0.0f },
     };
 
-    VkPipelineLayout pipeline_layout = { 0 };
-
     VkPipelineLayoutCreateInfo pipeline_layout_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount = 0,
@@ -1079,7 +1239,7 @@ static int create_graphics_pipeline(
         app->device,
         &pipeline_layout_info,
         NULL,
-        &pipeline_layout
+        &app->pipeline_layout
     );
     if (result != VK_SUCCESS) {
         return HT_ERROR_CREATE_GRAPHICS_PIPELINE_LAYOUT;
@@ -1097,7 +1257,7 @@ static int create_graphics_pipeline(
         .pDepthStencilState = NULL,
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_state,
-        .layout = pipeline_layout,
+        .layout = app->pipeline_layout,
         .renderPass = app->render_pass,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
@@ -1124,10 +1284,10 @@ static int create_graphics_pipeline(
 
 static int create_framebuffers(
     hello_triangle_app_t *app,
-    byte_slice_t *perm_arena
+    byte_slice_t *swapchain_arena
 ) {
     app->swapchain_framebuffers.ptr = aven_alloc(
-        perm_arena,
+        swapchain_arena,
         app->swapchain_image_views.len * sizeof(
             *app->swapchain_framebuffers.ptr
         ),
@@ -1364,13 +1524,16 @@ static void cleanup_swapchain(hello_triangle_app_t *app) {
 
 static int recreate_swapchain(
     hello_triangle_app_t *app,
-    byte_slice_t *perm_arena,
+    byte_slice_t *swapchain_arena,
     byte_slice_t temp_arena
 ) {
     int width = 0;
     int height = 0;
     glfwGetFramebufferSize(app->window, &width, &height);
     while (width == 0 or height == 0) {
+        if (glfwWindowShouldClose(app->window)) {
+            return 0;
+        }
         glfwGetFramebufferSize(app->window, &width, &height);
         glfwWaitEvents();
     }
@@ -1378,19 +1541,19 @@ static int recreate_swapchain(
     vkDeviceWaitIdle(app->device);
 
     cleanup_swapchain(app);
-    *perm_arena = app->base_arena;
+    *swapchain_arena = app->base_swapchain_arena;
 
-    int error = create_swapchain(app, perm_arena, temp_arena);
+    int error = create_swapchain(app, swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
     }
 
-    error = create_image_views(app, perm_arena, temp_arena);
+    error = create_image_views(app, swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
     }
 
-    error = create_framebuffers(app, perm_arena);
+    error = create_framebuffers(app, swapchain_arena);
     if (error != 0) {
         return error;
     }
@@ -1400,13 +1563,20 @@ static int recreate_swapchain(
 
 static int init_vulkan(
     hello_triangle_app_t *app,
-    byte_slice_t *perm_arena,
+    byte_slice_t *swapchain_arena,
     byte_slice_t temp_arena
 ) {
-    int error = create_instance(app);
+    int error = create_instance(app, temp_arena);
     if (error != 0) {
         return error;
     }
+
+#ifdef ENABLE_VALIDATION_LAYERS
+    error = setup_debug_messenger(app);
+    if (error != 0) {
+        return error;
+    }
+#endif
     
     error = create_surface(app);
     if (error != 0) {
@@ -1423,12 +1593,12 @@ static int init_vulkan(
         return error;
     }
 
-    error = create_swapchain(app, perm_arena, temp_arena);
+    error = create_swapchain(app, swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
     }
 
-    error = create_image_views(app, perm_arena, temp_arena);
+    error = create_image_views(app, swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
     }
@@ -1443,7 +1613,7 @@ static int init_vulkan(
         return error;
     }
 
-    error = create_framebuffers(app, perm_arena);
+    error = create_framebuffers(app, swapchain_arena);
     if (error != 0) {
         return error;
     }
@@ -1468,7 +1638,7 @@ static int init_vulkan(
 
 static int draw_frame(
     hello_triangle_app_t *app,
-    byte_slice_t *perm_arena,
+    byte_slice_t *swapchain_arena,
     byte_slice_t temp_arena
 ) {
     vkWaitForFences(
@@ -1488,9 +1658,8 @@ static int draw_frame(
         VK_NULL_HANDLE,
         &image_index
     );
-    if (result == VK_ERROR_OUT_OF_DATE_KHR or app->framebuffer_resized) {
-        app->framebuffer_resized = false;
-        return recreate_swapchain(app, perm_arena, temp_arena);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        return recreate_swapchain(app, swapchain_arena, temp_arena);
     } else if (result != VK_SUCCESS and result != VK_SUBOPTIMAL_KHR) {
         return HT_ERROR_DRAW_FRAME_SWAPCHAIN;
     }
@@ -1549,21 +1718,31 @@ static int draw_frame(
         .pResults = NULL,
     };
 
-    vkQueuePresentKHR(app->present_queue, &present_info);
-
     app->current_frame = (app->current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+    result = vkQueuePresentKHR(app->present_queue, &present_info);
+    if (
+        result == VK_ERROR_OUT_OF_DATE_KHR or
+        result == VK_SUBOPTIMAL_KHR or
+        app->framebuffer_resized
+    ) {
+        app->framebuffer_resized = false;
+        return recreate_swapchain(app, swapchain_arena, temp_arena);
+    } else if (result != VK_SUCCESS) {
+        return HT_ERROR_DRAW_FRAME_SWAPCHAIN;
+    }
  
     return 0;
 }
 
 static int main_loop(
     hello_triangle_app_t *app,
-    byte_slice_t *perm_arena,
+    byte_slice_t *swapchain_arena,
     byte_slice_t temp_arena
 ) {
     while (!glfwWindowShouldClose(app->window)) {
         glfwPollEvents();
-        draw_frame(app, perm_arena, temp_arena);
+        draw_frame(app, swapchain_arena, temp_arena);
     }
     
     vkDeviceWaitIdle(app->device);
@@ -1598,6 +1777,15 @@ static void cleanup(hello_triangle_app_t *app) {
     vkDestroyDevice(app->device, NULL);
 
     vkDestroySurfaceKHR(app->instance, app->surface, NULL);
+
+#ifdef ENABLE_VALIDATION_LAYERS
+    destroy_debug_utils_messenger_ext(
+        app->instance,
+        app->debug_messenger,
+        NULL
+    );
+#endif
+
     vkDestroyInstance(app->instance, NULL);
 
     glfwDestroyWindow(app->window);
@@ -1605,25 +1793,25 @@ static void cleanup(hello_triangle_app_t *app) {
 }
 
 static int run(hello_triangle_app_t *app, byte_slice_t temp_arena) {
-    byte_slice_t perm_arena = {
+    byte_slice_t swapchain_arena = {
         .ptr = aven_alloc(&temp_arena, ARENA_SIZE, 1),
         .len = ARENA_SIZE,
     };
-    assert(perm_arena.ptr != NULL);
+    assert(swapchain_arena.ptr != NULL);
 
-    app->base_arena = perm_arena;
+    app->base_swapchain_arena = swapchain_arena;
 
     int error = init_window(app);
     if (error != 0) {
         return error;
     }
 
-    error = init_vulkan(app, &perm_arena, temp_arena);
+    error = init_vulkan(app, &swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
     }
 
-    error = main_loop(app, &perm_arena, temp_arena);
+    error = main_loop(app, &swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
     }

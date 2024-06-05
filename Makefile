@@ -1,22 +1,39 @@
-CC ?= gcc
-CFLAGS ?= -std=c99 -g3 -pedantic -fstrict-aliasing \
-	 -fsanitize-trap -fsanitize=unreachable -fsanitize=undefined \
+CC = gcc
+CFLAGS = -std=c99 -pedantic -fstrict-aliasing \
 	 -Wcast-align -Wstrict-prototypes -Wold-style-definition \
 	 -Werror -Wall -Wextra -Wconversion -Wdouble-promotion \
 	 -Wno-unused-parameter -Wno-unused-function -Wno-sign-conversion
+CDBGFLAGS = -g3 -fsanitize-trap -fsanitize=unreachable -fsanitize=undefined
+COPTFLAGS = -O2
 
-SHADERC ?= glslc
-SHADERFLAGS ?= 
+SHADERC = glslc
+SHADERFLAGS = 
 
-all: vulkan_hello_triangle shaders/vert.spv shaders/frag.spv
+LIBFLAGS = -lm -lglfw3 -lvulkan
 
+all: debug release
+
+.PHONY: debug
+debug: hello_triangle_dbg shaders
+
+.PHONY: release
+release: hello_triangle shaders
+
+.PHONY: shaders
+shaders: shaders/vert.spv shaders/frag.spv
+
+.PHONY: clean
 clean:
-	rm -f vulkan_hello_triangle main.o aven.o \
+	rm -f hello_triangle hello_triangle_dbg \
 		shaders/vert.spv shaders/frag.spv
 
-vulkan_hello_triangle: main.c aven.c
-	$(CC) $(CFLAGS) -o vulkan_hello_triangle main.c aven.c \
-		-lm -lglfw3 -lvulkan
+hello_triangle: main.c aven.c
+	$(CC) $(CFLAGS) $(COPTFLAGS) -o hello_triangle main.c aven.c \
+		$(LIBFLAGS)
+
+hello_triangle_dbg: main.c aven.c
+	$(CC) $(CFLAGS) $(CDBGFLAGS) -o hello_triangle_dbg main.c aven.c \
+		-D ENABLE_VALIDATION_LAYERS $(LIBFLAGS)
 
 shaders/vert.spv: shaders/base.vert
 	$(SHADERC) $(SHADERFLAGS) -o shaders/vert.spv shaders/base.vert

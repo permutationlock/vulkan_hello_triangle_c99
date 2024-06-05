@@ -59,4 +59,7 @@ __attribute((malloc, alloc_size(2), alloc_align(3)))
 #endif
 void *aven_alloc(byte_slice_t *arena, size_t size, size_t align);
 
+#define aven_create(t, a) (t *)aven_alloc(a, sizeof(t), alignof(t))
+#define aven_create_array(t, a, n) (t *)aven_alloc(a, n * sizeof(t), alignof(t))
+
 #endif // AVEN_H

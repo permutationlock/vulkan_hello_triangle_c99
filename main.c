@@ -159,10 +159,10 @@ static bool_result_t check_validation_layer_support(
     uint32_t layer_count;
     vkEnumerateInstanceLayerProperties(&layer_count, NULL);
 
-    VkLayerProperties *available_layers = aven_alloc(
+    VkLayerProperties *available_layers = aven_create_array(
+        VkLayerProperties,
         &temp_arena,
-        layer_count * sizeof(*available_layers),
-        alignof(*available_layers)
+        layer_count
     );
     if (available_layers == NULL) {
         return (bool_result_t){
@@ -295,10 +295,10 @@ static int create_instance(
     );
 
     uint32_t extension_count = glfw_extension_count + 1;
-    const char **extensions = aven_alloc(
-        &temp_arena, 
-        extension_count * sizeof(*extensions),
-        alignof(*extensions)
+    const char **extensions = aven_create_array(
+        const char *,
+        &temp_arena,
+        extension_count
     );
     if (extensions == NULL) {
         return HT_ERROR_CREATE_INSTANCE_ALLOC;
@@ -360,10 +360,10 @@ static queue_family_indices_result_t find_queue_families(
 
     uint32_t queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, NULL);
-    VkQueueFamilyProperties *queue_families = aven_alloc(
+    VkQueueFamilyProperties *queue_families = aven_create_array(
+        VkQueueFamilyProperties,
         &temp_arena,
-        queue_family_count * sizeof(*queue_families),
-        alignof(*queue_families)
+        queue_family_count
     );
     if (queue_families == NULL) {
         return (queue_family_indices_result_t){
@@ -410,10 +410,10 @@ static bool_result_t check_device_extension_support(
     uint32_t extension_count;
     vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, NULL);
 
-    VkExtensionProperties *available_extensions = aven_alloc(
+    VkExtensionProperties *available_extensions = aven_create_array(
+        VkExtensionProperties,
         &temp_arena,
-        extension_count * sizeof(*available_extensions),
-        alignof(*available_extensions)
+        extension_count
     );
     if (available_extensions == NULL) {
         return (bool_result_t){
@@ -483,10 +483,10 @@ static swapchain_support_details_result_t query_swapchain_support(
     );
 
     if (format_count !=0 ) {
-        details.formats.ptr = aven_alloc(
+        details.formats.ptr = aven_create_array(
+            VkSurfaceFormatKHR,
             perm_arena,
-            format_count * sizeof(*details.formats.ptr),
-            alignof(*details.formats.ptr)
+            format_count
         );
         if (details.formats.ptr == NULL) {
             return (swapchain_support_details_result_t){
@@ -512,10 +512,10 @@ static swapchain_support_details_result_t query_swapchain_support(
     );
 
     if (present_mode_count != 0) {
-        details.present_modes.ptr = aven_alloc(
+        details.present_modes.ptr = aven_create_array(
+            VkPresentModeKHR,
             perm_arena,
-            present_mode_count * sizeof(*details.present_modes.ptr),
-            alignof(*details.present_modes.ptr)
+            present_mode_count
         );
         if (details.present_modes.ptr == NULL) {
             return (swapchain_support_details_result_t){
@@ -602,10 +602,10 @@ static int pick_physical_device(
         return HT_ERROR_PICK_PHYSICAL_DEVICE_ENUMERATE;
     }
 
-    VkPhysicalDevice *devices = aven_alloc(
+    VkPhysicalDevice *devices = aven_create_array(
+        VkPhysicalDevice,
         &temp_arena,
-        device_count * sizeof(*devices),
-        alignof(*devices)
+        device_count
     );
     if (devices == NULL) {
         return HT_ERROR_PICK_PHYSICAL_DEVICE_ALLOC;
@@ -865,10 +865,10 @@ static int create_swapchain(
 
     vkGetSwapchainImagesKHR(app->device, app->swapchain, &image_count, NULL);
 
-    app->swapchain_images.ptr = aven_alloc(
+    app->swapchain_images.ptr = aven_create_array(
+        VkImage,
         swapchain_arena,
-        image_count * sizeof(*app->swapchain_images.ptr),
-        alignof(*app->swapchain_images.ptr)
+        image_count
     );
     if (app->swapchain_images.ptr == NULL) {
         return HT_ERROR_CREATE_SWAP_CHAIN_ALLOC;
@@ -893,15 +893,15 @@ static int create_image_views(
     byte_slice_t *swapchain_arena,
     byte_slice_t temp_arena
 ) {
-    app->swapchain_image_views.ptr = aven_alloc(
+    app->swapchain_image_views.ptr = aven_create_array(
+        VkImageView,
         swapchain_arena,
-        app->swapchain_images.len * sizeof(*app->swapchain_image_views.ptr),
-        alignof(*app->swapchain_image_views.ptr)
+        app->swapchain_images.len
     );
+    app->swapchain_image_views.len = app->swapchain_images.len;
     if (app->swapchain_image_views.ptr == NULL) {
         return HT_ERROR_CREATE_IMAGE_VIEWS_ALLOC;
     }
-    app->swapchain_image_views.len = app->swapchain_images.len;
 
     for (size_t i = 0; i < app->swapchain_images.len; ++i) {
         VkImageViewCreateInfo create_info = {
@@ -963,8 +963,10 @@ static byte_slice_result_t read_file(
 
     rewind(file);
 
-    byte_slice_t bytes = { .ptr = NULL, .len = (size_t)len };
-    bytes.ptr = aven_alloc(perm_arena, bytes.len, alignof(bytes.ptr));
+    byte_slice_t bytes = {
+        .ptr = aven_alloc(perm_arena, (size_t)len, 1),
+        .len = (size_t)len,
+    };
     if (bytes.ptr == NULL) {
         fclose(file);
         return (byte_slice_result_t){ .error = HT_ERROR_READ_FILE_ALLOC };
@@ -1286,17 +1288,15 @@ static int create_framebuffers(
     hello_triangle_app_t *app,
     byte_slice_t *swapchain_arena
 ) {
-    app->swapchain_framebuffers.ptr = aven_alloc(
+    app->swapchain_framebuffers.ptr = aven_create_array(
+        VkFramebuffer,
         swapchain_arena,
-        app->swapchain_image_views.len * sizeof(
-            *app->swapchain_framebuffers.ptr
-        ),
-        alignof(*app->swapchain_framebuffers.ptr)
+        app->swapchain_image_views.len
     );
+    app->swapchain_framebuffers.len = app->swapchain_image_views.len;
     if (app->swapchain_framebuffers.ptr == NULL) {
         return HT_ERROR_CREATE_FRAMEBUFFER_ALLOC;
     }
-    app->swapchain_framebuffers.len = app->swapchain_image_views.len;
 
     for (size_t i = 0; i < app->swapchain_image_views.len; ++i) {
         VkImageView attachments[] = {

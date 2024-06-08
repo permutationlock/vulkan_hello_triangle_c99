@@ -24,13 +24,14 @@ const char *DEVICE_EXTENSIONS[] = {
 };
 
 typedef struct { float pos[2]; float color[3]; } vertex_t;
-const vertex_t vertices[] = {
+
+const vertex_t VERTICES[] = {
     { {0.0f, -0.5f}, {1.0f, 0.0f, 0.0f} },
     { {0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} },
     { {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f} }
 };
 
-VkVertexInputBindingDescription vertex_binding_descriptions[] = {
+VkVertexInputBindingDescription VERTEX_BINDING_DESCRIPTIONS[] = {
     {
         .binding = 0,
         .stride = sizeof(vertex_t),
@@ -38,7 +39,7 @@ VkVertexInputBindingDescription vertex_binding_descriptions[] = {
     },
 };
 
-VkVertexInputAttributeDescription vertex_attribute_descriptions[] = {
+VkVertexInputAttributeDescription VERTEX_ATTRIBUTE_DESCRIPTIONS[] = {
     {
         .binding = 0,
         .location = 0,
@@ -89,6 +90,8 @@ typedef struct {
 
     VkBuffer vertex_buffer;
     VkDeviceMemory vertex_buffer_memory;
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
 
     VkCommandPool command_pool;
     VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
@@ -141,8 +144,11 @@ typedef enum {
     HT_ERROR_DRAW_FRAME_SWAPCHAIN,
     HT_ERRROR_DRAW_FRAME_SUBMIT,
     HT_ERROR_FIND_MEMORY_TYPE,
-    HT_ERROR_CREATE_VERTEX_BUFFER_CREATE,
-    HT_ERROR_CREATE_VERTEX_BUFFER_MEMORY,
+    HT_ERROR_CREATE_BUFFER_CREATE,
+    HT_ERROR_CREATE_BUFFER_MEMORY,
+    HT_ERROR_COPY_BUFFER_ALLOCATE,
+    HT_ERROR_COPY_BUFFER_COMMAND,
+    HT_ERROR_COPY_BUFFER_SUBMIT,
 #ifdef ENABLE_VALIDATION_LAYERS
     HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
     HT_ERROR_SETUP_DEBUG_MESSENGER,
@@ -1175,12 +1181,12 @@ static int create_graphics_pipeline(
 
     VkPipelineVertexInputStateCreateInfo vertex_input_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount = countof(vertex_binding_descriptions),
-        .pVertexBindingDescriptions = vertex_binding_descriptions,
+        .vertexBindingDescriptionCount = countof(VERTEX_BINDING_DESCRIPTIONS),
+        .pVertexBindingDescriptions = VERTEX_BINDING_DESCRIPTIONS,
         .vertexAttributeDescriptionCount = countof(
-            vertex_attribute_descriptions
+            VERTEX_ATTRIBUTE_DESCRIPTIONS
         ),
-        .pVertexAttributeDescriptions = vertex_attribute_descriptions,
+        .pVertexAttributeDescriptions = VERTEX_ATTRIBUTE_DESCRIPTIONS,
     };
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly = {
@@ -1431,11 +1437,18 @@ static uint32_result_t find_memory_type(
     return (uint32_result_t){ .error = HT_ERROR_FIND_MEMORY_TYPE };
 }
 
-static int create_vertex_buffer(hello_triangle_app_t *app) {
+static int create_buffer(
+    hello_triangle_app_t *app,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    VkMemoryPropertyFlags properties,
+    VkBuffer *buffer,
+    VkDeviceMemory *buffer_memory
+) {
     VkBufferCreateInfo buffer_info = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = sizeof(vertices),
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        .size = size,
+        .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
 
@@ -1443,16 +1456,16 @@ static int create_vertex_buffer(hello_triangle_app_t *app) {
         app->device,
         &buffer_info,
         NULL,
-        &app->vertex_buffer
+        buffer
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_VERTEX_BUFFER_CREATE;
+        return HT_ERROR_CREATE_BUFFER_CREATE;
     }
 
     VkMemoryRequirements mem_requirements;
     vkGetBufferMemoryRequirements(
         app->device,
-        app->vertex_buffer,
+        *buffer,
         &mem_requirements
     );
 
@@ -1461,8 +1474,7 @@ static int create_vertex_buffer(hello_triangle_app_t *app) {
         uint32_result_t memory_type_index_result = find_memory_type(
             app,
             mem_requirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            properties
         );
         if (memory_type_index_result.error != 0) {
             return memory_type_index_result.error;
@@ -1481,32 +1493,135 @@ static int create_vertex_buffer(hello_triangle_app_t *app) {
         app->device,
         &alloc_info,
         NULL,
-        &app->vertex_buffer_memory
+        buffer_memory
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_VERTEX_BUFFER_MEMORY;
+        return HT_ERROR_CREATE_BUFFER_MEMORY;
     }
 
     vkBindBufferMemory(
         app->device,
-        app->vertex_buffer,
-        app->vertex_buffer_memory,
+        *buffer,
+        *buffer_memory,
         0
     );
+
+    return 0;
+}
+
+static int copy_buffer(
+    hello_triangle_app_t *app,
+    VkBuffer dst_buffer,
+    VkBuffer src_buffer,
+    VkDeviceSize size
+) {
+    VkCommandBufferAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandPool = app->command_pool,
+        .commandBufferCount = 1,
+    };
+
+    VkCommandBuffer command_buffer; 
+    VkResult result = vkAllocateCommandBuffers(
+        app->device,
+        &alloc_info,
+        &command_buffer
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_COPY_BUFFER_ALLOCATE;
+    }
+
+    VkCommandBufferBeginInfo begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vkBeginCommandBuffer(command_buffer, &begin_info);
+
+    VkBufferCopy copy_region = {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = size
+    };
+    vkCmdCopyBuffer(command_buffer, src_buffer, dst_buffer, 1, &copy_region);
+
+    result = vkEndCommandBuffer(command_buffer);
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_COPY_BUFFER_COMMAND;
+    }
+
+    VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &command_buffer,
+    };
+    result = vkQueueSubmit(
+        app->graphics_queue,
+        1,
+        &submit_info,
+        VK_NULL_HANDLE
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_COPY_BUFFER_SUBMIT;
+    }
+
+    vkQueueWaitIdle(app->graphics_queue);
+
+    vkFreeCommandBuffers(app->device, app->command_pool, 1, &command_buffer);
+
+    return 0;
+}
+
+static int create_vertex_buffer(hello_triangle_app_t *app) {
+    VkDeviceSize buffer_size = sizeof(VERTICES);
+
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+
+    int error = create_buffer(
+        app,
+        buffer_size,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &staging_buffer,
+        &staging_buffer_memory
+    );
+    if (error != 0) {
+        return 0;
+    }
 
     {
         void *buffer;
         vkMapMemory(
             app->device,
-            app->vertex_buffer_memory,
+            staging_buffer_memory,
             0,
-            buffer_info.size,
+            buffer_size,
             0,
             &buffer
         );
-        memcpy(buffer, vertices, (size_t)buffer_info.size);
-        vkUnmapMemory(app->device, app->vertex_buffer_memory);
+        memcpy(buffer, VERTICES, (size_t)buffer_size);
+        vkUnmapMemory(app->device, staging_buffer_memory);
     }
+
+    create_buffer(
+        app,
+        buffer_size,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &app->vertex_buffer,
+        &app->vertex_buffer_memory
+    );
+
+    error = copy_buffer(app, app->vertex_buffer, staging_buffer, buffer_size);
+    if (error != 0) {
+        return error;
+    }
+
+    vkDestroyBuffer(app->device, staging_buffer, NULL);
+    vkFreeMemory(app->device, staging_buffer_memory, NULL);
 
     return 0;
 }
@@ -1650,7 +1765,7 @@ static int record_command_buffer(
         offsets
     );
 
-    vkCmdDraw(command_buffer, countof(vertices), 1, 0, 0);
+    vkCmdDraw(command_buffer, countof(VERTICES), 1, 0, 0);
 
     vkCmdEndRenderPass(command_buffer);
 
@@ -1832,11 +1947,14 @@ static int draw_frame(
     vkResetFences(app->device, 1, &app->in_flight_fences[app->current_frame]);
 
     vkResetCommandBuffer(app->command_buffers[app->current_frame], 0);
-    record_command_buffer(
+    int error = record_command_buffer(
         app,
         app->command_buffers[app->current_frame],
         image_index
     );
+    if (error != 0) {
+        return error;
+    }
 
     VkSemaphore wait_semaphores[] = {
         app->image_available_semaphores[app->current_frame]

@@ -21,11 +21,12 @@ const char *VALIDATION_LAYERS[] = {
 
 const char *DEVICE_EXTENSIONS[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+//    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 };
 
-typedef struct { float pos[2]; float color[3]; } vertex_t;
+typedef struct { float pos[2]; float color[3]; } Vertex;
 
-const vertex_t VERTICES[] = {
+const Vertex VERTICES[] = {
     { {0.0f, -0.5f}, {1.0f, 0.0f, 0.0f} },
     { {0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} },
     { {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f} }
@@ -34,7 +35,7 @@ const vertex_t VERTICES[] = {
 VkVertexInputBindingDescription VERTEX_BINDING_DESCRIPTIONS[] = {
     {
         .binding = 0,
-        .stride = sizeof(vertex_t),
+        .stride = sizeof(Vertex),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
     },
 };
@@ -44,19 +45,19 @@ VkVertexInputAttributeDescription VERTEX_ATTRIBUTE_DESCRIPTIONS[] = {
         .binding = 0,
         .location = 0,
         .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = offsetof(vertex_t, pos),
+        .offset = offsetof(Vertex, pos),
     },
     {
         .binding = 0,
         .location = 1,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = offsetof(vertex_t, color),
+        .offset = offsetof(Vertex, color),
     },
 };
 
-typedef slice(VkImage) VkImage_slice_t;
-typedef slice(VkImageView) VkImageView_slice_t;
-typedef slice(VkFramebuffer) VkFramebuffer_slice_t;
+typedef Slice(VkImage) VkImageSlice;
+typedef Slice(VkImageView) VkImageViewSlice;
+typedef Slice(VkFramebuffer) VkFramebufferSlice;
 
 typedef struct {
     uint32_t width;
@@ -78,9 +79,9 @@ typedef struct {
     VkQueue present_queue;
 
     VkSwapchainKHR swapchain;
-    VkImage_slice_t swapchain_images;
-    VkImageView_slice_t swapchain_image_views;
-    VkFramebuffer_slice_t swapchain_framebuffers;
+    VkImageSlice swapchain_images;
+    VkImageViewSlice swapchain_image_views;
+    VkFramebufferSlice swapchain_framebuffers;
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
 
@@ -100,10 +101,10 @@ typedef struct {
     VkSemaphore render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
     VkFence in_flight_fences[MAX_FRAMES_IN_FLIGHT];
 
-    byte_slice_t base_swapchain_arena;
+    Arena base_swapchain_arena;
     uint32_t current_frame;
     bool framebuffer_resized;
-} hello_triangle_app_t;
+} HelloTriangleApp;
 
 typedef enum {
     HT_ERROR_NONE = 0,
@@ -154,14 +155,14 @@ typedef enum {
     HT_ERROR_SETUP_DEBUG_MESSENGER,
     HT_ERROR_CREATE_INSTANCE_VALIDATION,
 #endif
-} hello_triangle_error_t;
+} HelloTriangleError;
 
 void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
-    hello_triangle_app_t *app = glfwGetWindowUserPointer(window);
+    HelloTriangleApp *app = glfwGetWindowUserPointer(window);
     app->framebuffer_resized = true;
 }
 
-static int init_window(hello_triangle_app_t *app) {
+static int init_window(HelloTriangleApp *app) {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -182,7 +183,7 @@ static int init_window(hello_triangle_app_t *app) {
     return 0;
 }
 
-typedef result(bool) bool_result_t;
+typedef Result(bool) BoolResult;
 
 #ifdef ENABLE_VALIDATION_LAYERS
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
@@ -196,20 +197,20 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
     return VK_FALSE;
 }
 
-static bool_result_t check_validation_layer_support(
-    hello_triangle_app_t *app,
-    byte_slice_t temp_arena
+static BoolResult check_validation_layer_support(
+    HelloTriangleApp *app,
+    Arena temp_arena
 ) {
     uint32_t layer_count;
     vkEnumerateInstanceLayerProperties(&layer_count, NULL);
 
-    VkLayerProperties *available_layers = aven_create_array(
+    VkLayerProperties *available_layers = arena_create_array(
         VkLayerProperties,
         &temp_arena,
         layer_count
     );
     if (available_layers == NULL) {
-        return (bool_result_t){
+        return (BoolResult){
             .error = HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC
         };
     }
@@ -229,11 +230,11 @@ static bool_result_t check_validation_layer_support(
             }
         }
         if (!layer_found) {
-            return (bool_result_t){ .payload = false };
+            return (BoolResult){ .payload = false };
         }
     }
 
-    return (bool_result_t){ .payload = true };
+    return (BoolResult){ .payload = true };
 }
 
 static VkResult create_debug_utils_messenger_ext(
@@ -283,7 +284,7 @@ static VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info(void) {
     };
 }
 
-static int setup_debug_messenger(hello_triangle_app_t *app) {
+static int setup_debug_messenger(HelloTriangleApp *app) {
     VkDebugUtilsMessengerCreateInfoEXT create_info =
         debug_messenger_create_info();
 
@@ -302,12 +303,12 @@ static int setup_debug_messenger(hello_triangle_app_t *app) {
 #endif
 
 static int create_instance(
-    hello_triangle_app_t *app,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena temp_arena
 ) {
 #ifdef ENABLE_VALIDATION_LAYERS
     {
-        bool_result_t layer_support_result = check_validation_layer_support(
+        BoolResult layer_support_result = check_validation_layer_support(
             app,
             temp_arena
         );
@@ -338,11 +339,11 @@ static int create_instance(
         &glfw_extension_count
     );
 
-    uint32_t extension_count = glfw_extension_count + 1;
-    const char **extensions = aven_create_array(
+    uint32_t extension_count = glfw_extension_count;
+    const char **extensions = arena_create_array(
         const char *,
         &temp_arena,
-        extension_count
+        extension_count + 1
     );
     if (extensions == NULL) {
         return HT_ERROR_CREATE_INSTANCE_ALLOC;
@@ -353,7 +354,11 @@ static int create_instance(
         glfw_extensions,
         sizeof(*glfw_extensions) * glfw_extension_count
     );
-    extensions[glfw_extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+
+#ifdef ENABLE_VALIDATION_LAYERS
+    extensions[extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+    extension_count += 1;
+#endif
 
     VkInstanceCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -374,7 +379,7 @@ static int create_instance(
     return 0;
 }
 
-static int create_surface(hello_triangle_app_t *app) {
+static int create_surface(HelloTriangleApp *app) {
     VkResult result = glfwCreateWindowSurface(
         app->instance,
         app->window,
@@ -389,28 +394,28 @@ static int create_surface(hello_triangle_app_t *app) {
 }
 
 typedef struct {
-    optional(uint32_t) graphics_family;
-    optional(uint32_t) present_family;
-} queue_family_indices_t;
+    Optional(uint32_t) graphics_family;
+    Optional(uint32_t) present_family;
+} QueueFamilyIndices;
 
-typedef result(queue_family_indices_t) queue_family_indices_result_t;
+typedef Result(QueueFamilyIndices) QueueFamilyIndicesResult;
 
-static queue_family_indices_result_t find_queue_families(
-    hello_triangle_app_t *app,
+static QueueFamilyIndicesResult find_queue_families(
+    HelloTriangleApp *app,
     VkPhysicalDevice device,
-    byte_slice_t temp_arena
+    Arena temp_arena
 ) {
-    queue_family_indices_t indices = { 0 };
+    QueueFamilyIndices indices = { 0 };
 
     uint32_t queue_family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, NULL);
-    VkQueueFamilyProperties *queue_families = aven_create_array(
+    VkQueueFamilyProperties *queue_families = arena_create_array(
         VkQueueFamilyProperties,
         &temp_arena,
         queue_family_count
     );
     if (queue_families == NULL) {
-        return (queue_family_indices_result_t){
+        return (QueueFamilyIndicesResult){
             .error = HT_ERROR_FIND_QUEUE_FAMILIES_ALLOC
         };
     }
@@ -444,23 +449,23 @@ static queue_family_indices_result_t find_queue_families(
         }
     }
 
-    return (queue_family_indices_result_t){ .payload = indices };
+    return (QueueFamilyIndicesResult){ .payload = indices };
 }
 
-static bool_result_t check_device_extension_support(
+static BoolResult check_device_extension_support(
     VkPhysicalDevice device,
-    byte_slice_t temp_arena
+    Arena temp_arena
 ) {
     uint32_t extension_count;
     vkEnumerateDeviceExtensionProperties(device, NULL, &extension_count, NULL);
 
-    VkExtensionProperties *available_extensions = aven_create_array(
+    VkExtensionProperties *available_extensions = arena_create_array(
         VkExtensionProperties,
         &temp_arena,
         extension_count
     );
     if (available_extensions == NULL) {
-        return (bool_result_t){
+        return (BoolResult){
             .error = HT_ERROR_CHECK_DEVICE_EXTENSION_SUPPORT_ALLOC
         };
     }
@@ -485,32 +490,32 @@ static bool_result_t check_device_extension_support(
             }
         }
         if (!extension_found) {
-            return (bool_result_t){ .payload = false };
+            return (BoolResult){ .payload = false };
         }
     }
 
-    return (bool_result_t){ .payload = true };
+    return (BoolResult){ .payload = true };
 }
 
-typedef slice(VkSurfaceFormatKHR) VkSurfaceFormatKHR_slice_t;
-typedef slice(VkPresentModeKHR) VkPresentModeKHR_slice_t;
+typedef Slice(VkSurfaceFormatKHR) VkSurfaceFormatKHRSlice;
+typedef Slice(VkPresentModeKHR) VkPresentModeKHRSlice;
 
 typedef struct {
     VkSurfaceCapabilitiesKHR capabilities;
-    VkSurfaceFormatKHR_slice_t formats;
-    VkPresentModeKHR_slice_t present_modes;
-} swapchain_support_details_t;
+    VkSurfaceFormatKHRSlice formats;
+    VkPresentModeKHRSlice present_modes;
+} SwapchainSupportDetails;
 
-typedef result(
-    swapchain_support_details_t
-) swapchain_support_details_result_t;
+typedef Result(
+    SwapchainSupportDetails
+) SwapchainSupportDetailsResult;
 
-static swapchain_support_details_result_t query_swapchain_support(
-    hello_triangle_app_t *app,
+static SwapchainSupportDetailsResult query_swapchain_support(
+    HelloTriangleApp *app,
     VkPhysicalDevice device,
-    byte_slice_t *perm_arena
+    Arena *perm_arena
 ) {
-    swapchain_support_details_t details = { 0 };
+    SwapchainSupportDetails details = { 0 };
     
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         device,
@@ -527,13 +532,13 @@ static swapchain_support_details_result_t query_swapchain_support(
     );
 
     if (format_count !=0 ) {
-        details.formats.ptr = aven_create_array(
+        details.formats.ptr = arena_create_array(
             VkSurfaceFormatKHR,
             perm_arena,
             format_count
         );
         if (details.formats.ptr == NULL) {
-            return (swapchain_support_details_result_t){
+            return (SwapchainSupportDetailsResult){
                 .error = HT_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC
             };
         }
@@ -556,13 +561,13 @@ static swapchain_support_details_result_t query_swapchain_support(
     );
 
     if (present_mode_count != 0) {
-        details.present_modes.ptr = aven_create_array(
+        details.present_modes.ptr = arena_create_array(
             VkPresentModeKHR,
             perm_arena,
             present_mode_count
         );
         if (details.present_modes.ptr == NULL) {
-            return (swapchain_support_details_result_t){
+            return (SwapchainSupportDetailsResult){
                 .error = HT_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC
             };
         }
@@ -576,69 +581,64 @@ static swapchain_support_details_result_t query_swapchain_support(
         details.present_modes.len = present_mode_count;
     }
 
-    return (swapchain_support_details_result_t){ .payload = details };
+    return (SwapchainSupportDetailsResult){ .payload = details };
 }
 
-static bool_result_t is_device_suitable(
-    hello_triangle_app_t *app,
+static BoolResult is_device_suitable(
+    HelloTriangleApp *app,
     VkPhysicalDevice device,
-    byte_slice_t temp_arena
+    Arena temp_arena
 ) {
-    queue_family_indices_t indices;
     {
-        queue_family_indices_result_t result = find_queue_families(
+        QueueFamilyIndicesResult result = find_queue_families(
             app,
             device,
             temp_arena
         );
         if (result.error != 0) {
-            return (bool_result_t){ .error = result.error };
+            return (BoolResult){ .error = result.error };
         }
         
-        indices = result.payload;
+        if (
+            !result.payload.graphics_family.valid or
+            !result.payload.present_family.valid
+        ) {
+            return (BoolResult){ .payload = false };
+        }
     }
-
-    bool queue_family_complete = indices.graphics_family.valid and
-        indices.present_family.valid;
-
-    bool extensions_supported = false;
     {
-        bool_result_t result = check_device_extension_support(
+        BoolResult result = check_device_extension_support(
             device,
             temp_arena
         );
-        if (result.error != 0) {
+        if (result.error != 0 or !result.payload) {
             return result;
         }
-
-        extensions_supported = result.payload;
     }
-
-    bool swapchain_adequate = false;
-    if (extensions_supported) {
-        swapchain_support_details_result_t result = query_swapchain_support(
+    {
+        SwapchainSupportDetailsResult result = query_swapchain_support(
             app,
             device,
             &temp_arena
         );
         if (result.error != 0) {
-            return (bool_result_t){ .error = result.error };
+            return (BoolResult){ .error = result.error };
         }
 
-        swapchain_adequate = result.payload.formats.len > 0 and
-            result.payload.present_modes.len > 0;
+        if (
+            result.payload.formats.len == 0 or
+            result.payload.present_modes.len == 0
+        ) {
+            return (BoolResult){ .payload = false };
+        }
     }
 
-    return (bool_result_t){
-        .payload = queue_family_complete and
-            extensions_supported and
-            swapchain_adequate
-    };
+    return (BoolResult){ .payload = true };
 }
 
 static int pick_physical_device(
-    hello_triangle_app_t *app,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena temp_arena
 ) {
     uint32_t device_count = 0;
     vkEnumeratePhysicalDevices(app->instance, &device_count, NULL);
@@ -646,7 +646,7 @@ static int pick_physical_device(
         return HT_ERROR_PICK_PHYSICAL_DEVICE_ENUMERATE;
     }
 
-    VkPhysicalDevice *devices = aven_create_array(
+    VkPhysicalDevice *devices = arena_create_array(
         VkPhysicalDevice,
         &temp_arena,
         device_count
@@ -658,7 +658,7 @@ static int pick_physical_device(
     vkEnumeratePhysicalDevices(app->instance, &device_count, devices);
 
     for (uint32_t i = 0; i < device_count; ++i) {
-        bool_result_t result = is_device_suitable(app, devices[i], temp_arena);
+        BoolResult result = is_device_suitable(app, devices[i], temp_arena);
         if (result.error != 0) {
             return result.error;
         }
@@ -677,19 +677,23 @@ static int pick_physical_device(
 }
 
 static int create_logical_device(
-    hello_triangle_app_t *app,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena temp_arena
 ) {
-    queue_family_indices_result_t indices_result = find_queue_families(
-        app,
-        app->physical_device,
-        temp_arena
-    );
-    if (indices_result.error != 0) {
-        return indices_result.error;
+    QueueFamilyIndices indices;
+    {
+        QueueFamilyIndicesResult indices_result = find_queue_families(
+            app,
+            app->physical_device,
+            temp_arena
+        );
+        if (indices_result.error != 0) {
+            return indices_result.error;
+        }
+
+        indices = indices_result.payload;
     }
 
-    queue_family_indices_t indices = indices_result.payload;
     assert(indices.graphics_family.valid and indices.present_family.valid);
 
     uint32_t queue_families[] = {
@@ -714,8 +718,17 @@ static int create_logical_device(
 
     VkPhysicalDeviceFeatures device_features = { 0 };
 
+    /*
+    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {
+        .sType =
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+        .dynamicRendering = VK_TRUE,
+    };
+    */
+
     VkDeviceCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        //.pNext = &dynamic_rendering_features,
         .queueCreateInfoCount = queue_family_count,
         .pQueueCreateInfos = queue_create_infos,
         .pEnabledFeatures = &device_features,
@@ -750,7 +763,7 @@ static int create_logical_device(
 }
 
 static VkSurfaceFormatKHR choose_swap_surface_format(
-    VkSurfaceFormatKHR_slice_t available_formats
+    VkSurfaceFormatKHRSlice available_formats
 ) {
     for (size_t i = 0; i < available_formats.len; ++i) {
         VkSurfaceFormatKHR format = slice_get(available_formats, i);
@@ -766,7 +779,7 @@ static VkSurfaceFormatKHR choose_swap_surface_format(
 }
 
 static VkPresentModeKHR choose_swap_present_mode(
-    VkPresentModeKHR_slice_t available_present_modes
+    VkPresentModeKHRSlice available_present_modes
 ) {
     for (size_t i = 0; i < available_present_modes.len; ++i) {
         VkPresentModeKHR present_mode = slice_get(available_present_modes, i);
@@ -779,7 +792,7 @@ static VkPresentModeKHR choose_swap_present_mode(
 }
 
 static VkExtent2D choose_swap_extent(
-    hello_triangle_app_t *app,
+    HelloTriangleApp *app,
     VkSurfaceCapabilitiesKHR *capabilities
 ) {
     if (capabilities->currentExtent.width != UINT32_MAX) {
@@ -814,13 +827,13 @@ static VkExtent2D choose_swap_extent(
 }
 
 static int create_swapchain(
-    hello_triangle_app_t *app,
-    byte_slice_t *swapchain_arena,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena *swapchain_arena,
+    Arena temp_arena
 ) {
-    swapchain_support_details_t swapchain_support;
+    SwapchainSupportDetails swapchain_support;
     {
-        swapchain_support_details_result_t result = query_swapchain_support(
+        SwapchainSupportDetailsResult result = query_swapchain_support(
             app,
             app->physical_device,
             &temp_arena
@@ -868,9 +881,9 @@ static int create_swapchain(
         .oldSwapchain = VK_NULL_HANDLE,
     };
 
-    queue_family_indices_t indices;
+    QueueFamilyIndices indices;
     {
-        queue_family_indices_result_t result = find_queue_families(
+        QueueFamilyIndicesResult result = find_queue_families(
             app,
             app->physical_device,
             temp_arena
@@ -909,7 +922,7 @@ static int create_swapchain(
 
     vkGetSwapchainImagesKHR(app->device, app->swapchain, &image_count, NULL);
 
-    app->swapchain_images.ptr = aven_create_array(
+    app->swapchain_images.ptr = arena_create_array(
         VkImage,
         swapchain_arena,
         image_count
@@ -933,11 +946,11 @@ static int create_swapchain(
 }
 
 static int create_image_views(
-    hello_triangle_app_t *app,
-    byte_slice_t *swapchain_arena,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena *swapchain_arena,
+    Arena temp_arena
 ) {
-    app->swapchain_image_views.ptr = aven_create_array(
+    app->swapchain_image_views.ptr = arena_create_array(
         VkImageView,
         swapchain_arena,
         app->swapchain_images.len
@@ -982,38 +995,38 @@ static int create_image_views(
     return 0;
 }
 
-typedef result(byte_slice_t) byte_slice_result_t;
+typedef Result(ByteSlice) ByteSliceResult;
 
-static byte_slice_result_t read_file(
+static ByteSliceResult read_file(
     const char *filename,
-    byte_slice_t *perm_arena
+    Arena *perm_arena
 ) {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
-        return (byte_slice_result_t){ .error = HT_ERROR_READ_FILE_OPEN };
+        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_OPEN };
     }
 
     int error = fseek(file, 0L, SEEK_END);
     if (error != 0) {
         fclose(file);
-        return (byte_slice_result_t){ .error = HT_ERROR_READ_FILE_SEEK };
+        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_SEEK };
     }
 
     long len = ftell(file);
     if (len < 0) {
         fclose(file);
-        return (byte_slice_result_t){ .error = HT_ERROR_READ_FILE_TELL };
+        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_TELL };
     }
 
     rewind(file);
 
-    byte_slice_t bytes = {
-        .ptr = aven_alloc(perm_arena, (size_t)len, 1),
+    ByteSlice bytes = {
+        .ptr = arena_alloc(perm_arena, (size_t)len, 1),
         .len = (size_t)len,
     };
     if (bytes.ptr == NULL) {
         fclose(file);
-        return (byte_slice_result_t){ .error = HT_ERROR_READ_FILE_ALLOC };
+        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_ALLOC };
     }
     
     size_t bytes_read = fread(bytes.ptr, 1, bytes.len, file);
@@ -1021,17 +1034,17 @@ static byte_slice_result_t read_file(
     fclose(file);
 
     if (bytes_read != bytes.len) {
-        return (byte_slice_result_t){ .error = HT_ERROR_READ_FILE_READ };
+        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_READ };
     }
 
-    return (byte_slice_result_t){ .payload = bytes };
+    return (ByteSliceResult){ .payload = bytes };
 }
 
-typedef result(VkShaderModule) VkShaderModule_result_t;
+typedef Result(VkShaderModule) VkShaderModuleResult;
 
-static VkShaderModule_result_t create_shader_module(
-    hello_triangle_app_t *app,
-    byte_slice_t code
+static VkShaderModuleResult create_shader_module(
+    HelloTriangleApp *app,
+    ByteSlice code
 ) {
     VkShaderModuleCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1047,15 +1060,15 @@ static VkShaderModule_result_t create_shader_module(
         &shader_module
     );
     if (result != VK_SUCCESS) {
-        return (VkShaderModule_result_t){
+        return (VkShaderModuleResult){
             .error = HT_ERROR_CREATE_SHADER_MODULE
         };
     }
 
-    return (VkShaderModule_result_t){ .payload = shader_module };
+    return (VkShaderModuleResult){ .payload = shader_module };
 }
 
-static int create_render_pass(hello_triangle_app_t *app) {
+static int create_render_pass(HelloTriangleApp *app) {
     VkAttachmentDescription color_attachment = {
         .format = app->swapchain_image_format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -1111,12 +1124,12 @@ static int create_render_pass(hello_triangle_app_t *app) {
 }
 
 static int create_graphics_pipeline(
-    hello_triangle_app_t *app,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena temp_arena
 ) {
-    byte_slice_t vert_shader_code;
+    ByteSlice vert_shader_code;
     {
-        byte_slice_result_t result = read_file("shaders/vert.spv", &temp_arena);
+        ByteSliceResult result = read_file("shaders/vert.spv", &temp_arena);
         if (result.error != 0) {
             return result.error;
         }
@@ -1124,9 +1137,9 @@ static int create_graphics_pipeline(
         vert_shader_code = result.payload;
     }
 
-    byte_slice_t frag_shader_code;
+    ByteSlice frag_shader_code;
     {
-        byte_slice_result_t result = read_file("shaders/frag.spv", &temp_arena);
+        ByteSliceResult result = read_file("shaders/frag.spv", &temp_arena);
         if (result.error != 0) {
             return result.error;
         }
@@ -1136,7 +1149,7 @@ static int create_graphics_pipeline(
 
     VkShaderModule vert_shader_module;
     {
-        VkShaderModule_result_t result = create_shader_module(
+        VkShaderModuleResult result = create_shader_module(
             app,
             vert_shader_code
         );
@@ -1149,7 +1162,7 @@ static int create_graphics_pipeline(
 
     VkShaderModule frag_shader_module;
     {
-        VkShaderModule_result_t result = create_shader_module(
+        VkShaderModuleResult result = create_shader_module(
             app,
             frag_shader_code
         );
@@ -1331,10 +1344,10 @@ static int create_graphics_pipeline(
 }
 
 static int create_framebuffers(
-    hello_triangle_app_t *app,
-    byte_slice_t *swapchain_arena
+    HelloTriangleApp *app,
+    Arena *swapchain_arena
 ) {
-    app->swapchain_framebuffers.ptr = aven_create_array(
+    app->swapchain_framebuffers.ptr = arena_create_array(
         VkFramebuffer,
         swapchain_arena,
         app->swapchain_image_views.len
@@ -1374,12 +1387,12 @@ static int create_framebuffers(
 }
 
 static int create_command_pool(
-    hello_triangle_app_t *app,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena temp_arena
 ) {
-    queue_family_indices_t queue_family_indices;
+    QueueFamilyIndices queue_family_indices;
     {
-        queue_family_indices_result_t result = find_queue_families(
+        QueueFamilyIndicesResult result = find_queue_families(
             app,
             app->physical_device,
             temp_arena
@@ -1409,10 +1422,10 @@ static int create_command_pool(
     return 0;
 }
 
-typedef result(uint32_t) uint32_result_t;
+typedef Result(uint32_t) MemoryTypeIndexResult;
 
-static uint32_result_t find_memory_type(
-    hello_triangle_app_t *app,
+static MemoryTypeIndexResult find_memory_type(
+    HelloTriangleApp *app,
     uint32_t type_filter,
     VkMemoryPropertyFlags properties
 ) {
@@ -1430,15 +1443,15 @@ static uint32_result_t find_memory_type(
         VkMemoryPropertyFlags type_properties =
             mem_properties.memoryTypes[i].propertyFlags;
         if ((type_properties & properties) == properties) {
-            return (uint32_result_t){ .payload = i };
+            return (MemoryTypeIndexResult){ .payload = i };
         }
     }
 
-    return (uint32_result_t){ .error = HT_ERROR_FIND_MEMORY_TYPE };
+    return (MemoryTypeIndexResult){ .error = HT_ERROR_FIND_MEMORY_TYPE };
 }
 
 static int create_buffer(
-    hello_triangle_app_t *app,
+    HelloTriangleApp *app,
     VkDeviceSize size,
     VkBufferUsageFlags usage,
     VkMemoryPropertyFlags properties,
@@ -1471,7 +1484,7 @@ static int create_buffer(
 
     uint32_t memory_type_index;
     {
-        uint32_result_t memory_type_index_result = find_memory_type(
+        MemoryTypeIndexResult memory_type_index_result = find_memory_type(
             app,
             mem_requirements.memoryTypeBits,
             properties
@@ -1510,7 +1523,7 @@ static int create_buffer(
 }
 
 static int copy_buffer(
-    hello_triangle_app_t *app,
+    HelloTriangleApp *app,
     VkBuffer dst_buffer,
     VkBuffer src_buffer,
     VkDeviceSize size
@@ -1572,7 +1585,7 @@ static int copy_buffer(
     return 0;
 }
 
-static int create_vertex_buffer(hello_triangle_app_t *app) {
+static int create_vertex_buffer(HelloTriangleApp *app) {
     VkDeviceSize buffer_size = sizeof(VERTICES);
 
     VkBuffer staging_buffer;
@@ -1626,7 +1639,7 @@ static int create_vertex_buffer(hello_triangle_app_t *app) {
     return 0;
 }
 
-static int create_command_buffers(hello_triangle_app_t *app) {
+static int create_command_buffers(HelloTriangleApp *app) {
     VkCommandBufferAllocateInfo alloc_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = app->command_pool,
@@ -1646,7 +1659,7 @@ static int create_command_buffers(hello_triangle_app_t *app) {
     return 0;
 }
 
-static int create_sync_objects(hello_triangle_app_t *app) {
+static int create_sync_objects(HelloTriangleApp *app) {
     VkSemaphoreCreateInfo semaphore_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
@@ -1692,7 +1705,7 @@ static int create_sync_objects(hello_triangle_app_t *app) {
 }
 
 static int record_command_buffer(
-    hello_triangle_app_t *app,
+    HelloTriangleApp *app,
     VkCommandBuffer command_buffer,
     uint32_t image_index
 ) {
@@ -1777,7 +1790,7 @@ static int record_command_buffer(
     return 0;
 }
 
-static void cleanup_swapchain(hello_triangle_app_t *app) {
+static void cleanup_swapchain(HelloTriangleApp *app) {
     for (size_t i = 0; i < app->swapchain_framebuffers.len; ++i) {
         vkDestroyFramebuffer(
             app->device,
@@ -1798,9 +1811,9 @@ static void cleanup_swapchain(hello_triangle_app_t *app) {
 }
 
 static int recreate_swapchain(
-    hello_triangle_app_t *app,
-    byte_slice_t *swapchain_arena,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena *swapchain_arena,
+    Arena temp_arena
 ) {
     int width = 0;
     int height = 0;
@@ -1837,9 +1850,9 @@ static int recreate_swapchain(
 }
 
 static int init_vulkan(
-    hello_triangle_app_t *app,
-    byte_slice_t *swapchain_arena,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena *swapchain_arena,
+    Arena temp_arena
 ) {
     int error = create_instance(app, temp_arena);
     if (error != 0) {
@@ -1917,9 +1930,9 @@ static int init_vulkan(
 }
 
 static int draw_frame(
-    hello_triangle_app_t *app,
-    byte_slice_t *swapchain_arena,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena *swapchain_arena,
+    Arena temp_arena
 ) {
     vkWaitForFences(
         app->device,
@@ -2019,9 +2032,9 @@ static int draw_frame(
 }
 
 static int main_loop(
-    hello_triangle_app_t *app,
-    byte_slice_t *swapchain_arena,
-    byte_slice_t temp_arena
+    HelloTriangleApp *app,
+    Arena *swapchain_arena,
+    Arena temp_arena
 ) {
     while (!glfwWindowShouldClose(app->window)) {
         glfwPollEvents();
@@ -2033,7 +2046,7 @@ static int main_loop(
     return 0;
 }
 
-static void cleanup(hello_triangle_app_t *app) {
+static void cleanup(HelloTriangleApp *app) {
     cleanup_swapchain(app);
 
     vkDestroyBuffer(app->device, app->vertex_buffer, NULL);
@@ -2078,12 +2091,12 @@ static void cleanup(hello_triangle_app_t *app) {
     glfwTerminate();
 }
 
-static int run(hello_triangle_app_t *app, byte_slice_t temp_arena) {
-    byte_slice_t swapchain_arena = {
-        .ptr = aven_alloc(&temp_arena, ARENA_SIZE, 1),
-        .len = ARENA_SIZE,
-    };
-    assert(swapchain_arena.ptr != NULL);
+static int run(HelloTriangleApp *app, Arena temp_arena) {
+    Arena swapchain_arena = arena_init(
+        arena_alloc(&temp_arena, ARENA_SIZE, 1),
+        ARENA_SIZE
+    );
+    assert(swapchain_arena.base != NULL);
 
     app->base_swapchain_arena = swapchain_arena;
 
@@ -2108,15 +2121,15 @@ static int run(hello_triangle_app_t *app, byte_slice_t temp_arena) {
 }
 
 int main(void) {
-    byte_slice_t arena = {
-        .ptr = malloc(2 * ARENA_SIZE),
-        .len = 2 * ARENA_SIZE
-    };
-    if (arena.ptr == NULL) {
+    Arena arena = arena_init(
+        malloc(2 * ARENA_SIZE),
+        2 * ARENA_SIZE
+    );
+    if (arena.base == NULL) {
         return HT_ERROR_MAIN_MALLOC;
     }
 
-    hello_triangle_app_t app = {
+    HelloTriangleApp app = {
         .width = 640,
         .height = 480,
         .physical_device = VK_NULL_HANDLE,
@@ -2124,7 +2137,7 @@ int main(void) {
 
     int error = run(&app, arena);
 
-    free(arena.ptr);
+    free(arena.base);
 
     return error;
 }

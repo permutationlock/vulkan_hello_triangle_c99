@@ -12,54 +12,73 @@
 #ifdef __GNUC__
     #define assert(c) while (!(c)) { __builtin_unreachable(); }
 #else
-    #define assert(c) while (!(c)) { int s = *(int *)NULL; }
+    #define assert(c)
 #endif
 
 #define countof(array) (sizeof(array) / sizeof(*array))
 
 #if __STDC_VERSION >= 202000L
+    #include <stdalign.h>
     #define NORETURN [[noreturn]]
 #elif __STDC_VERSION__ >= 201112L
+    #include <stdalign.h>
     #define NORETURN _Noreturn
-    #define alignof(t) _Alignof(t)
 #elif __STDC_VERSION__ >= 199901L
     #define NORETURN
     #ifndef AVEN_MAX_ALIGNMENT
-        #error "for C99 define AVEN_MAX_ALIGNMENT as the target's max alignment"
+        #error "for C99 define AVEN_MAX_ALIGNMENT to be target max alignment"
     #endif
     #define alignof(t) (AVEN_MAX_ALIGNMENT)
 #else
-    #error "requires C99 or later"
+    #error "C99 or later is required"
 #endif
 
-#define optional(t) struct { t value; bool valid; }
-#define result(t) struct { t payload; int error; }
-#define slice(t) struct { t *ptr; size_t len; }
+#define Optional(t) struct { t value; bool valid; }
+#define Result(t) struct { t payload; int error; }
+#define Slice(t) struct { t *ptr; size_t len; }
 
-#define slice_get(s, i) (s.ptr[aven_verify_index_internal(i, s.len)])
+#ifdef __GNUC__
+    static size_t aven_verify_index_internal(size_t index, size_t len) {
+        assert(index < len);
+        return index;
+    }
 
-typedef slice(unsigned char) byte_slice_t;
+    #define slice_get(s, i) (s.ptr[aven_verify_index_internal(i, s.len)])
+#else
+    #define slice_get(s, i) (s.ptr[i])
+#endif
 
-#define as_bytes(ptr) ((byte_slice_t){ \
+
+typedef Slice(unsigned char) ByteSlice;
+
+#define as_bytes(ptr) ((ByteSlice){ \
         .ptr = (unsigned char *)ptr, \
         .len = sizeof(*ptr) \
     })
-#define array_as_bytes(ptr) ((byte_slice_t){ \
+#define array_as_bytes(ptr) ((ByteSlice){ \
         .ptr = (unsigned char *)ptr, \
         .len = sizeof(ptr)\
     })
 
-static size_t aven_verify_index_internal(size_t index, size_t len) {
-    assert(index < len);
-    return index;
+typedef struct {
+    unsigned char *base;
+    unsigned char *top;
+} Arena;
+
+static Arena arena_init(void *mem, size_t size) {
+    return (Arena){ .base = mem, .top = (unsigned char *)mem + size };
 }
 
 #ifdef __GNUC__
 __attribute((malloc, alloc_size(2), alloc_align(3)))
 #endif
-void *aven_alloc(byte_slice_t *arena, size_t size, size_t align);
+void *arena_alloc(Arena *arena, size_t size, size_t align);
 
-#define aven_create(t, a) (t *)aven_alloc(a, sizeof(t), alignof(t))
-#define aven_create_array(t, a, n) (t *)aven_alloc(a, n * sizeof(t), alignof(t))
+#define arena_create(t, a) (t *)arena_alloc(a, sizeof(t), alignof(t))
+#define arena_create_array(t, a, n) (t *)arena_alloc( \
+        a, \
+        n * sizeof(t), \
+        alignof(t) \
+    )
 
 #endif // AVEN_H

@@ -1,14 +1,11 @@
 #define AVEN_MAX_ALIGNMENT
 #include "aven.h"
 
-void *aven_alloc(byte_slice_t *arena, size_t size, size_t align) {
-    size_t padding = -(size_t)arena->ptr & (align - 1);
-    size_t total = size + padding;
-    if (total > arena->len) {
-        return 0;
+void *arena_alloc(Arena *arena, size_t size, size_t align) {
+    unsigned char *p = (void *)((size_t)(arena->top - size) & ~(align - 1));
+    if (p - arena->base < 0) {
+        return NULL;
     }
-    unsigned char *p = arena->ptr + padding;
-    arena->ptr += total;
-    arena->len -= total;
+    arena->top = p;
     return p;
 }

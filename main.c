@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <vulkan/vulkan_core.h>
+#define VK_USE_PLATFORM_WAYLAND_KHR
+#define VOLK_IMPLEMENTATION
+#include "volk.h"
+//#include <vulkan/vulkan_core.h>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -21,7 +24,7 @@ const char *VALIDATION_LAYERS[] = {
 
 const char *DEVICE_EXTENSIONS[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-//    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 };
 
 typedef struct { float pos[2]; float color[3]; } Vertex;
@@ -57,7 +60,6 @@ VkVertexInputAttributeDescription VERTEX_ATTRIBUTE_DESCRIPTIONS[] = {
 
 typedef Slice(VkImage) VkImageSlice;
 typedef Slice(VkImageView) VkImageViewSlice;
-typedef Slice(VkFramebuffer) VkFramebufferSlice;
 
 typedef struct {
     uint32_t width;
@@ -81,11 +83,9 @@ typedef struct {
     VkSwapchainKHR swapchain;
     VkImageSlice swapchain_images;
     VkImageViewSlice swapchain_image_views;
-    VkFramebufferSlice swapchain_framebuffers;
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
 
-    VkRenderPass render_pass;
     VkPipelineLayout pipeline_layout;
     VkPipeline graphics_pipeline;
 
@@ -110,6 +110,7 @@ typedef enum {
     HT_ERROR_NONE = 0,
     HT_ERROR_MAIN_MALLOC,
     HT_ERROR_INIT_WINDOW,
+    HT_ERROR_INIT_VULKAN_VOLK,
     HT_ERROR_CREATE_INSTANCE_ALLOC,
     HT_ERROR_CREATE_INSTANCE_CREATE,
     HT_ERROR_CREATE_SURFACE,
@@ -237,39 +238,6 @@ static BoolResult check_validation_layer_support(
     return (BoolResult){ .payload = true };
 }
 
-static VkResult create_debug_utils_messenger_ext(
-    VkInstance instance,
-    const VkDebugUtilsMessengerCreateInfoEXT *create_info,
-    const VkAllocationCallbacks *allocator,
-    VkDebugUtilsMessengerEXT *debug_messenger
-) {
-    PFN_vkCreateDebugUtilsMessengerEXT func =
-        (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-            instance,
-            "vkCreateDebugUtilsMessengerEXT"
-        );
-    if (func == NULL) {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-
-    return func(instance, create_info, allocator, debug_messenger);
-}
-
-static void destroy_debug_utils_messenger_ext(
-    VkInstance instance,
-    VkDebugUtilsMessengerEXT debug_messenger,
-    const VkAllocationCallbacks *allocator
-) {
-    PFN_vkDestroyDebugUtilsMessengerEXT func = 
-        (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-            instance,
-            "vkDestroyDebugUtilsMessengerEXT"
-        );
-    assert(func != NULL);
-
-    func(instance, debug_messenger, allocator);
-}
-
 static VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info(void) {
     return (VkDebugUtilsMessengerCreateInfoEXT){
         .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -288,7 +256,7 @@ static int setup_debug_messenger(HelloTriangleApp *app) {
     VkDebugUtilsMessengerCreateInfoEXT create_info =
         debug_messenger_create_info();
 
-    VkResult result = create_debug_utils_messenger_ext(
+    VkResult result = vkCreateDebugUtilsMessengerEXT(
         app->instance,
         &create_info,
         NULL,
@@ -331,7 +299,7 @@ static int create_instance(
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
         .pEngineName = "No Engine",
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-        .apiVersion = VK_API_VERSION_1_0,
+        .apiVersion = VK_API_VERSION_1_3,
     };
 
     uint32_t glfw_extension_count = 0;
@@ -343,7 +311,7 @@ static int create_instance(
     const char **extensions = arena_create_array(
         const char *,
         &temp_arena,
-        extension_count + 1
+        extension_count
     );
     if (extensions == NULL) {
         return HT_ERROR_CREATE_INSTANCE_ALLOC;
@@ -376,6 +344,9 @@ static int create_instance(
     if (result != VK_SUCCESS) {
         return HT_ERROR_CREATE_INSTANCE_CREATE;
     }
+
+    volkLoadInstanceOnly(app->instance);
+
     return 0;
 }
 
@@ -718,17 +689,15 @@ static int create_logical_device(
 
     VkPhysicalDeviceFeatures device_features = { 0 };
 
-    /*
     VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {
         .sType =
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
         .dynamicRendering = VK_TRUE,
     };
-    */
 
     VkDeviceCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        //.pNext = &dynamic_rendering_features,
+        .pNext = &dynamic_rendering_features,
         .queueCreateInfoCount = queue_family_count,
         .pQueueCreateInfos = queue_create_infos,
         .pEnabledFeatures = &device_features,
@@ -745,6 +714,8 @@ static int create_logical_device(
     if (result != VK_SUCCESS) {
         return HT_ERROR_CREATE_LOGICAL_DEVICE;
     }
+
+    volkLoadDevice(app->device);
 
     vkGetDeviceQueue(
         app->device,
@@ -1068,61 +1039,6 @@ static VkShaderModuleResult create_shader_module(
     return (VkShaderModuleResult){ .payload = shader_module };
 }
 
-static int create_render_pass(HelloTriangleApp *app) {
-    VkAttachmentDescription color_attachment = {
-        .format = app->swapchain_image_format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    };
-
-    VkAttachmentReference color_attachment_ref = {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    };
-
-    VkSubpassDescription subpass = {
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_attachment_ref,
-    };
-
-    VkSubpassDependency dependency = {
-        .srcSubpass = VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .srcAccessMask = 0,
-        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    };
-
-    VkRenderPassCreateInfo render_pass_info = {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &color_attachment,
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
-        .dependencyCount = 1,
-        .pDependencies = &dependency,
-    };
-
-    VkResult result = vkCreateRenderPass(
-        app->device,
-        &render_pass_info,
-        NULL,
-        &app->render_pass
-    );
-    if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_RENDER_PASS;
-    }
-
-    return 0;
-}
-
 static int create_graphics_pipeline(
     HelloTriangleApp *app,
     Arena temp_arena
@@ -1306,8 +1222,15 @@ static int create_graphics_pipeline(
         return HT_ERROR_CREATE_GRAPHICS_PIPELINE_LAYOUT;
     }
 
+    VkPipelineRenderingCreateInfoKHR pipeline_rendering_create_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &app->swapchain_image_format,
+    };
+
     VkGraphicsPipelineCreateInfo pipeline_info = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext = &pipeline_rendering_create_info,
         .stageCount = 2,
         .pStages = shader_stages,
         .pVertexInputState = &vertex_input_info,
@@ -1319,7 +1242,7 @@ static int create_graphics_pipeline(
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_state,
         .layout = app->pipeline_layout,
-        .renderPass = app->render_pass,
+        .renderPass = NULL,
         .subpass = 0,
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1,
@@ -1339,49 +1262,6 @@ static int create_graphics_pipeline(
 
     vkDestroyShaderModule(app->device, frag_shader_module, NULL);
     vkDestroyShaderModule(app->device, vert_shader_module, NULL);
-
-    return 0;
-}
-
-static int create_framebuffers(
-    HelloTriangleApp *app,
-    Arena *swapchain_arena
-) {
-    app->swapchain_framebuffers.ptr = arena_create_array(
-        VkFramebuffer,
-        swapchain_arena,
-        app->swapchain_image_views.len
-    );
-    app->swapchain_framebuffers.len = app->swapchain_image_views.len;
-    if (app->swapchain_framebuffers.ptr == NULL) {
-        return HT_ERROR_CREATE_FRAMEBUFFER_ALLOC;
-    }
-
-    for (size_t i = 0; i < app->swapchain_image_views.len; ++i) {
-        VkImageView attachments[] = {
-            slice_get(app->swapchain_image_views, i)
-        };
-
-        VkFramebufferCreateInfo framebuffer_info = {
-            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .renderPass = app->render_pass,
-            .attachmentCount = countof(attachments),
-            .pAttachments = attachments,
-            .width = app->swapchain_extent.width,
-            .height = app->swapchain_extent.height,
-            .layers = 1,
-        };
-
-        VkResult result = vkCreateFramebuffer(
-            app->device,
-            &framebuffer_info,
-            NULL,
-            &slice_get(app->swapchain_framebuffers, i)
-        );
-        if (result != VK_SUCCESS) {
-            return HT_ERROR_CREATE_FRAMEBUFFER_CREATE;
-        }
-    }
 
     return 0;
 }
@@ -1720,29 +1600,61 @@ static int record_command_buffer(
         return HT_ERROR_RECORD_COMMAND_BUFFER_BEGIN;
     }
 
+    VkImageMemoryBarrier image_memory_barrier_optimal = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .image = slice_get(app->swapchain_images, image_index),
+        .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+        },
+    };
+
+    vkCmdPipelineBarrier(
+        command_buffer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0,
+        0,
+        NULL,
+        0,
+        NULL,
+        1,
+        &image_memory_barrier_optimal
+    );
+
     VkClearValue clear_color = {
         .color = {
             .float32 = { 0.0f, 0.0f, 0.0f, 1.0f },
         },
     };
 
-    VkRenderPassBeginInfo render_pass_info = {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = app->render_pass,
-        .framebuffer = slice_get(app->swapchain_framebuffers, image_index),
+    VkRenderingAttachmentInfoKHR color_attachment_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
+        .imageView = slice_get(app->swapchain_image_views, image_index),
+        .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clear_color,
+    };
+
+    VkRenderingInfoKHR render_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {
             .offset = { 0, 0 },
             .extent = app->swapchain_extent,
         },
-        .clearValueCount = 1,
-        .pClearValues = &clear_color,
+        .layerCount = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment_info,
     };
 
-    vkCmdBeginRenderPass(
-        command_buffer,
-        &render_pass_info,
-        VK_SUBPASS_CONTENTS_INLINE
-    );
+    vkCmdBeginRenderingKHR(command_buffer, &render_info);
 
     vkCmdBindPipeline(
         command_buffer,
@@ -1780,7 +1692,35 @@ static int record_command_buffer(
 
     vkCmdDraw(command_buffer, countof(VERTICES), 1, 0, 0);
 
-    vkCmdEndRenderPass(command_buffer);
+    vkCmdEndRendering(command_buffer);
+ 
+    VkImageMemoryBarrier image_memory_barrier_present = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .image = slice_get(app->swapchain_images, image_index),
+        .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+        },
+    };
+
+    vkCmdPipelineBarrier(
+        command_buffer,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        0,
+        0,
+        NULL,
+        0,
+        NULL,
+        1,
+        &image_memory_barrier_present
+    );
 
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
@@ -1791,14 +1731,6 @@ static int record_command_buffer(
 }
 
 static void cleanup_swapchain(HelloTriangleApp *app) {
-    for (size_t i = 0; i < app->swapchain_framebuffers.len; ++i) {
-        vkDestroyFramebuffer(
-            app->device,
-            slice_get(app->swapchain_framebuffers, i),
-            NULL
-        );
-    }
-
     for (size_t i = 0; i < app->swapchain_image_views.len; ++i) {
         vkDestroyImageView(
             app->device,
@@ -1841,11 +1773,6 @@ static int recreate_swapchain(
         return error;
     }
 
-    error = create_framebuffers(app, swapchain_arena);
-    if (error != 0) {
-        return error;
-    }
-
     return 0;
 }
 
@@ -1854,6 +1781,11 @@ static int init_vulkan(
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
+    VkResult result = volkInitialize();
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_INIT_VULKAN_VOLK;
+    }
+
     int error = create_instance(app, temp_arena);
     if (error != 0) {
         return error;
@@ -1891,17 +1823,7 @@ static int init_vulkan(
         return error;
     }
 
-    error = create_render_pass(app);
-    if (error != 0) {
-        return error;
-    }
-
     error = create_graphics_pipeline(app, temp_arena);
-    if (error != 0) {
-        return error;
-    }
-
-    error = create_framebuffers(app, swapchain_arena);
     if (error != 0) {
         return error;
     }
@@ -2055,8 +1977,6 @@ static void cleanup(HelloTriangleApp *app) {
     vkDestroyPipeline(app->device, app->graphics_pipeline, NULL);
     vkDestroyPipelineLayout(app->device, app->pipeline_layout, NULL);
 
-    vkDestroyRenderPass(app->device, app->render_pass, NULL);
-
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         vkDestroySemaphore(
             app->device,
@@ -2078,7 +1998,7 @@ static void cleanup(HelloTriangleApp *app) {
     vkDestroySurfaceKHR(app->instance, app->surface, NULL);
 
 #ifdef ENABLE_VALIDATION_LAYERS
-    destroy_debug_utils_messenger_ext(
+    vkDestroyDebugUtilsMessengerEXT(
         app->instance,
         app->debug_messenger,
         NULL

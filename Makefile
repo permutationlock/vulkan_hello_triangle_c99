@@ -9,7 +9,7 @@ COPTFLAGS = -O2
 SHADERC = glslc
 SHADERFLAGS = 
 
-LIBFLAGS = -lm -lglfw3 -lvulkan
+LIBFLAGS = -lm -lglfw3
 
 all: debug release
 

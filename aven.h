@@ -13,7 +13,10 @@
     #define assert(c) while (!(c)) { __builtin_unreachable(); }
 #else
     #define assert(c)
+    #define __attribute(a)
 #endif
+
+#define unused_parameter(p) (void)(p)
 
 #define countof(array) (sizeof(array) / sizeof(*array))
 
@@ -26,7 +29,7 @@
 #elif __STDC_VERSION__ >= 199901L
     #define NORETURN
     #ifndef AVEN_MAX_ALIGNMENT
-        #error "for C99 define AVEN_MAX_ALIGNMENT to be target max alignment"
+        #error "define AVEN_MAX_ALIGNMENT to be the target's max alignment"
     #endif
     #define alignof(t) (AVEN_MAX_ALIGNMENT)
 #else
@@ -37,17 +40,18 @@
 #define Result(t) struct { t payload; int error; }
 #define Slice(t) struct { t *ptr; size_t len; }
 
-#ifdef __GNUC__
-    static size_t aven_verify_index_internal(size_t index, size_t len) {
-        assert(index < len);
-        return index;
-    }
+#ifndef AVEN_NO_FUNCTIONS
+    #ifdef __GNUC__
+        static size_t aven_verify_index_internal(size_t index, size_t len) {
+            assert(index < len);
+            return index;
+        }
 
-    #define slice_get(s, i) (s.ptr[aven_verify_index_internal(i, s.len)])
-#else
-    #define slice_get(s, i) (s.ptr[i])
+        #define slice_get(s, i) (s.ptr[aven_verify_index_internal(i, s.len)])
+    #else
+        #define slice_get(s, i) (s.ptr[i])
+    #endif
 #endif
-
 
 typedef Slice(unsigned char) ByteSlice;
 
@@ -65,20 +69,20 @@ typedef struct {
     unsigned char *top;
 } Arena;
 
-static Arena arena_init(void *mem, size_t size) {
-    return (Arena){ .base = mem, .top = (unsigned char *)mem + size };
-}
+#ifndef AVEN_NO_FUNCTIONS
+    static Arena arena_init(void *mem, size_t size) {
+        return (Arena){ .base = mem, .top = (unsigned char *)mem + size };
+    }
 
-#ifdef __GNUC__
-__attribute((malloc, alloc_size(2), alloc_align(3)))
+    __attribute((malloc, alloc_size(2), alloc_align(3)))
+    void *arena_alloc(Arena *arena, size_t size, size_t align);
+
+    #define arena_create(t, a) (t *)arena_alloc(a, sizeof(t), alignof(t))
+    #define arena_create_array(t, a, n) (t *)arena_alloc( \
+            a, \
+            n * sizeof(t), \
+            alignof(t) \
+        )
 #endif
-void *arena_alloc(Arena *arena, size_t size, size_t align);
-
-#define arena_create(t, a) (t *)arena_alloc(a, sizeof(t), alignof(t))
-#define arena_create_array(t, a, n) (t *)arena_alloc( \
-        a, \
-        n * sizeof(t), \
-        alignof(t) \
-    )
 
 #endif // AVEN_H

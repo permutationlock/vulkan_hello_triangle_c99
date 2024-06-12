@@ -2,10 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VK_USE_PLATFORM_WAYLAND_KHR
 #define VOLK_IMPLEMENTATION
 #include "volk.h"
-//#include <vulkan/vulkan_core.h>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -159,6 +157,9 @@ typedef enum {
 } HelloTriangleError;
 
 void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
+    (void)width;
+    (void)height;
+
     HelloTriangleApp *app = glfwGetWindowUserPointer(window);
     app->framebuffer_resized = true;
 }
@@ -168,8 +169,8 @@ static int init_window(HelloTriangleApp *app) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
     app->window = glfwCreateWindow(
-        app->width,
-        app->height,
+        (int)app->width,
+        (int)app->height,
         "Vulkan",
         NULL,
         NULL
@@ -193,15 +194,16 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
     void* user_data
 ) {
+    (void)message_severity;
+    (void)message_type;
+    (void)user_data;
+
     fprintf(stderr, "validation layer: %s\n", callback_data->pMessage);
 
     return VK_FALSE;
 }
 
-static BoolResult check_validation_layer_support(
-    HelloTriangleApp *app,
-    Arena temp_arena
-) {
+static BoolResult check_validation_layer_support(Arena temp_arena) {
     uint32_t layer_count;
     vkEnumerateInstanceLayerProperties(&layer_count, NULL);
 
@@ -277,7 +279,6 @@ static int create_instance(
 #ifdef ENABLE_VALIDATION_LAYERS
     {
         BoolResult layer_support_result = check_validation_layer_support(
-            app,
             temp_arena
         );
         if (layer_support_result.error != 0) {
@@ -918,8 +919,7 @@ static int create_swapchain(
 
 static int create_image_views(
     HelloTriangleApp *app,
-    Arena *swapchain_arena,
-    Arena temp_arena
+    Arena *swapchain_arena
 ) {
     app->swapchain_image_views.ptr = arena_create_array(
         VkImageView,
@@ -1768,7 +1768,7 @@ static int recreate_swapchain(
         return error;
     }
 
-    error = create_image_views(app, swapchain_arena, temp_arena);
+    error = create_image_views(app, swapchain_arena);
     if (error != 0) {
         return error;
     }
@@ -1818,7 +1818,7 @@ static int init_vulkan(
         return error;
     }
 
-    error = create_image_views(app, swapchain_arena, temp_arena);
+    error = create_image_views(app, swapchain_arena);
     if (error != 0) {
         return error;
     }
@@ -1962,7 +1962,7 @@ static int main_loop(
         glfwPollEvents();
         draw_frame(app, swapchain_arena, temp_arena);
     }
-    
+
     vkDeviceWaitIdle(app->device);
 
     return 0;

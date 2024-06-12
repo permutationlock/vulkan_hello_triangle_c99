@@ -1,8 +1,7 @@
 CC = gcc
 CFLAGS = -std=c99 -pedantic -fstrict-aliasing \
-	 -Wcast-align -Wstrict-prototypes -Wold-style-definition \
 	 -Werror -Wall -Wextra -Wconversion -Wdouble-promotion \
-	 -Wno-unused-parameter -Wno-unused-function -Wno-sign-conversion
+	 -Wcast-align -Wstrict-prototypes -Wold-style-definition
 CDBGFLAGS = -g3 -fsanitize-trap -fsanitize=unreachable -fsanitize=undefined
 COPTFLAGS = -O2
 

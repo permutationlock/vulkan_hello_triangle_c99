@@ -1,4 +1,5 @@
 #define AVEN_MAX_ALIGNMENT
+#define AVEN_NO_FUNCTIONS
 #include "aven.h"
 
 void *arena_alloc(Arena *arena, size_t size, size_t align) {

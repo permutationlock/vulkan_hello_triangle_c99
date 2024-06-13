@@ -57,9 +57,6 @@ You can cross compile a windows application with the [mingw-w64][9] toolchain.
 make CC=x86_64-w64-mingw32-gcc CFLAGS+="-mwindows"
 ```
 
-You may also need a `-L/path/to/glfw` flag if the `libglf3.a` file for
-mingw isn't in the standard mingw lib directory.
-
 With [a small patch][15] to [QBE][16] to increase the maximum identifier
 length, the project can build from scratch with [cproc][1].
 

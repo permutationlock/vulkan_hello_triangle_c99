@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define VOLK_IMPLEMENTATION
-#include "volk.h"
+#include <volk.h>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>

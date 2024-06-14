@@ -9,7 +9,7 @@ SHADERC = glslc
 SHADERFLAGS = --target-env=vulkan1.3 -Werror -O
 
 INCLUDEFLAGS = -Ideps/glfw/include -Ideps/volk/include -Ideps/vulkan/include \
-	-Ideps/wayland/include
+	-Ideps/wayland/include -Ideps/xkbcommon/include
 LIBFLAGS = -lm
 
 GLFW_CFLAGS = -std=c99

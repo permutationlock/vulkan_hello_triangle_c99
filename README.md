@@ -19,8 +19,8 @@ and window management during runtime. It supports Linux with Wayland
 and Windows.
 
 The project vendors and builds [GLFW][2] and [volk][11]. Also included
-are the headers for [Vulkan][3], [Wayland][13], and the [Wayland
-protocols][14].
+are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
+[Wayland protocols][14].
 
 To run the application you will need the [Vulkan loader][4]
 and a Vulkan driver for your graphics card. To run the debug build
@@ -81,3 +81,4 @@ make release CC=cproc CFLAGS="-std=c99"
 [14]: https://gitlab.freedesktop.org/wayland/wayland-protocols
 [15]: https://musing.permutationlock.com/static/qbe_identifier_len_expansion.patch
 [16]: https://c9x.me/compile/
+[17]: https://github.com/xkbcommon/libxkbcommon

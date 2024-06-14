@@ -17,8 +17,8 @@ Windows targets.
 
 To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
-There are **ZERO** compile time dependencies beyond the `libc`
-for your target.
+There are **ZERO** compile time dependencies beyond the `libc` required
+by your target.
 
 The project vendors and builds [GLFW][2] and [volk][11]. Also included
 are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
@@ -26,13 +26,13 @@ are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
 
 To run the application you will need the [Vulkan loader][4]
 and a Vulkan driver for your graphics card. To run the debug build
-you will need to have installed [Vulkan validation layers][12].
+you will need to have installed the [Vulkan validation layers][12].
 
 To run on Linux you will need a Wayland compositor and the Wayland shared
 libraries, specifically `libwayland-client.so.0`,
 `libwayland-cursor.so.0`, and `libwayland-egl.so.1`. You will also need
 `libxkbcommon.so.0`.
-Note that virtually any Wayland compositor capable of Vulkan support will
+Note that virtually every Wayland compositor capable of Vulkan support will
 install these libraries by default.
 
 ## Building

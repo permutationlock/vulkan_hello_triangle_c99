@@ -4,20 +4,21 @@ An implementation of the basic triangle drawing example from
 the [Vulkan Tutorial][10] with some changes:
 
  - Vulkan 1.3 direct rendering is used in lieu of render passes;
- - the simple [volk][11] dynamic loader is
-   used to allow easy app distribution and cross-compilation.
+ - the [volk][11] dynamic loader used in lieu of directly linking
+   the `libvulkan.so` shared library.
 
 The project design was inpsired by
 [Chris Wellons' blog][18] and [raylib][19].
 
 ## Requirements
 
-Currently the project supports `x86_64` Windows and [Wayland][13] Linux
-targets.
+Currently the project supports Linux [Wayland][13] targets and `x86_64`
+Windows targets.
 
-To build the project you will need aC compiler that supports C99 or later,
+To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
-There are **ZERO** compile time dependencies beyond such a compiler with libc.
+There are **ZERO** compile time dependencies beyond the `libc`
+for your target.
 
 The project vendors and builds [GLFW][2] and [volk][11]. Also included
 are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
@@ -49,34 +50,33 @@ make
 ```
 
 If you have another compiler, then you can modify the appropriate
-environment varialbes to e.g. use the [clang compiler][20].
+environment varialbes to e.g. use [clang][20].
 
 ```
 make CC=clang
 ./hello_triangle
 ```
 
-You can easily cross compile a Windows application from Linux with the
-[Mingw-w64][9] toolchain.
-
-```
-make CC=x86_64-w64-mingw32-gcc CFLAGS+="-mwindows"
-```
-
-You can also cross compile a Windows application with [zig cc][18] (or any
-clang toolchain with a Mingw-w64 setup).
-
-```
-make CC="zig cc -target x86_64-windows-gnu" \
-    LIBFLAGS="-lkernel32 -luser32 -lgdi32"
-```
-
-The project can even build with the simple yet capable [cproc][1] C11
+The project will even build with the awesome and simple [cproc][1]
 compiler[^1].
 
 ```
-make release CC=cproc CFLAGS=""
+make CC=cproc CFLAGS=-std=c99 GLFW_FLAGS=-std=c99
 ./hello_triangle
+```
+
+You can easily cross-compile a Windows application from Linux with the
+[Mingw-w64][9] toolchain.
+
+```
+make CC=x86_64-w64-mingw32-gcc CFLAGS="-std=c99 -O2" LDFLAGS="-mwindows"
+```
+
+You can also cross-compile a Windows application with [zig cc][18] (or any
+clang toolchain with a Mingw-w64 target set up).
+
+```
+make CC="zig cc -target x86_64-windows-gnu" LDFLAGS="-lkernel32 -luser32 -lgdi32"
 ```
 
 ### Building on Windows
@@ -85,14 +85,14 @@ On a Windows machine you can compile and run a Windows application with
 Mingw-w64.
 
 ```
-make.exe release CFLAGS="-mwindows"
+make CFLAGS="-std=c99 -O2" LDFLAGS="-mwindows"
 ./hello_triangle.exe
 ```
 
-Or build native Windows app with Zig.
+Or build and run a Windows app with Zig.
 
 ```
-make.exe CC="zig cc" LIBLFAGS="-lkernel32 -luser32 -lgdi32"
+make CC="zig cc" LDLFAGS="-lkernel32 -luser32 -lgdi32"
 mv hello_triangle hello_triangle.exe
 ./hello_triangle.exe
 ```
@@ -100,7 +100,7 @@ mv hello_triangle hello_triangle.exe
 You can also cross-compile a Linux application from Windows.
 
 ```
-make.exe CC="zig cc -target x86_64-linux-gnu"
+make CC="zig cc -target x86_64-linux-gnu" CFLAGS="-std=c99 -O2"
 ```
 
 [^1]: A [small patch][15] to [QBE][16] is required to increase the maximum

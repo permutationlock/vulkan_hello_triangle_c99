@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Inspired by and/or copied from Chris Wellons (https://nullprogram.com)
+
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -15,8 +17,6 @@
     #define assert(c)
     #define __attribute(a)
 #endif
-
-#define unused_parameter(p) (void)(p)
 
 #define countof(array) (sizeof(array) / sizeof(*array))
 
@@ -40,6 +40,13 @@
 #define Result(t) struct { t payload; int error; }
 #define Slice(t) struct { t *ptr; size_t len; }
 
+typedef Slice(unsigned char) ByteSlice;
+
+typedef struct {
+    unsigned char *base;
+    unsigned char *top;
+} Arena;
+
 #ifndef AVEN_NO_FUNCTIONS
     #ifdef __GNUC__
         static size_t aven_verify_index_internal(size_t index, size_t len) {
@@ -51,25 +58,16 @@
     #else
         #define slice_get(s, i) (s.ptr[i])
     #endif
-#endif
 
-typedef Slice(unsigned char) ByteSlice;
+    #define as_bytes(ptr) ((ByteSlice){ \
+            .ptr = (unsigned char *)ptr, \
+            .len = sizeof(*ptr) \
+        })
+    #define array_as_bytes(ptr) ((ByteSlice){ \
+            .ptr = (unsigned char *)ptr, \
+            .len = sizeof(ptr)\
+        })
 
-#define as_bytes(ptr) ((ByteSlice){ \
-        .ptr = (unsigned char *)ptr, \
-        .len = sizeof(*ptr) \
-    })
-#define array_as_bytes(ptr) ((ByteSlice){ \
-        .ptr = (unsigned char *)ptr, \
-        .len = sizeof(ptr)\
-    })
-
-typedef struct {
-    unsigned char *base;
-    unsigned char *top;
-} Arena;
-
-#ifndef AVEN_NO_FUNCTIONS
     static Arena arena_init(void *mem, size_t size) {
         return (Arena){ .base = mem, .top = (unsigned char *)mem + size };
     }

@@ -1,4 +1,4 @@
-# Vulkan Tutorial Triangle in C99
+# Vulkan Tutorial Triangle in C99 (and later)
 
 An implementation of the basic triangle drawing example from
 the [Vulkan Tutorial][10] with some changes:
@@ -7,16 +7,17 @@ the [Vulkan Tutorial][10] with some changes:
  - the simple [volk][11] dynamic loader is
    used to allow easy app distribution and cross-compilation.
 
+The project design was inpsired by
+[Chris Wellons' blog][18] and [raylib][19].
 
 ## Requirements
 
-To build the project you will need a C99 or later compaitble C compiler and
-a [GLSL][5] to [SPIR-V][6] compiler.
+Currently the project supports `x86_64` Windows and [Wayland][13] Linux
+targets.
 
-There are **ZERO** compile time dependencies beyond libc.
-This is accomplished by dynamically loading the shared libraries for Vulkan
-and window management during runtime. It supports Linux with Wayland
-and Windows.
+To build the project you will need aC compiler that supports C99 or later,
+as well as a [GLSL][5] to [SPIR-V][6] compiler.
+There are **ZERO** compile time dependencies beyond such a compiler with libc.
 
 The project vendors and builds [GLFW][2] and [volk][11]. Also included
 are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
@@ -35,35 +36,75 @@ install these libraries by default.
 
 ## Building
 
-To build with [gcc][7] and [glslc][8] you can build and run with
-the default setup.
+The entire project builds with a single tiny `Makefile`.
+
+### Building on Linux
+
+By default `make` will build with [gcc][7] and compile shaders with
+[glslc][8].
 
 ```
 make
 ./hello_triangle
 ```
 
-If you have some other compiler, then you can modify the appropriate
-environment varialbes.
+If you have another compiler, then you can modify the appropriate
+environment varialbes to e.g. use the [clang compiler][20].
 
 ```
 make CC=clang
 ./hello_triangle
 ```
 
-You can cross compile a windows application with the [mingw-w64][9] toolchain.
+You can easily cross compile a Windows application from Linux with the
+[Mingw-w64][9] toolchain.
 
 ```
 make CC=x86_64-w64-mingw32-gcc CFLAGS+="-mwindows"
 ```
 
-With [a small patch][15] to [QBE][16] to increase the maximum identifier
-length, the project can build from scratch with [cproc][1].
+You can also cross compile a Windows application with [zig cc][18] (or any
+clang toolchain with a Mingw-w64 setup).
 
 ```
-make release CC=cproc CFLAGS="-std=c99"
+make CC="zig cc -target x86_64-windows-gnu" \
+    LIBFLAGS="-lkernel32 -luser32 -lgdi32"
+```
+
+The project can even build with the simple yet capable [cproc][1] C11
+compiler[^1].
+
+```
+make release CC=cproc CFLAGS=""
 ./hello_triangle
 ```
+
+### Building on Windows
+
+On a Windows machine you can compile and run a Windows application with
+Mingw-w64.
+
+```
+make.exe release CFLAGS="-mwindows"
+./hello_triangle.exe
+```
+
+Or build native Windows app with Zig.
+
+```
+make.exe CC="zig cc" LIBLFAGS="-lkernel32 -luser32 -lgdi32"
+mv hello_triangle hello_triangle.exe
+./hello_triangle.exe
+```
+
+You can also cross-compile a Linux application from Windows.
+
+```
+make.exe CC="zig cc -target x86_64-linux-gnu"
+```
+
+[^1]: A [small patch][15] to [QBE][16] is required to increase the maximum
+    identifier length.
 
 [1]: https://sr.ht/~mcf/cproc/
 [2]: https://github.com/glfw/glfw
@@ -82,3 +123,6 @@ make release CC=cproc CFLAGS="-std=c99"
 [15]: https://musing.permutationlock.com/static/qbe_identifier_len_expansion.patch
 [16]: https://c9x.me/compile/
 [17]: https://github.com/xkbcommon/libxkbcommon
+[18]: https://nullprogram.com
+[19]: https://github.com/raysan5/raylib
+[20]: https://clang.llvm.org/

@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -std=c99 -pedantic -fstrict-aliasing \
-	 -Werror -Wall -Wextra -Wconversion -Wdouble-promotion \
+CFLAGS = -std=c99 -pedantic -fstrict-aliasing -Werror \
+	 -Wall -Wextra -Wconversion -Wsign-conversion -Wdouble-promotion \
 	 -Wcast-align -Wstrict-prototypes -Wold-style-definition
 CDBGFLAGS = -g3 -fsanitize-trap -fsanitize=unreachable -fsanitize=undefined
 COPTFLAGS = -O2
@@ -29,8 +29,7 @@ shaders: shaders/vert.spv shaders/frag.spv
 
 .PHONY: clean
 clean:
-	rm -f hello_triangle hello_triangle_dbg \
-		hello_triangle.exe hello_triangle_dbg.exe \
+	rm -f hello_triangle* hello_triangle_dbg* \
 		deps/glfw/glfw.o deps/glfw/glfw_dbg.o \
 		shaders/vert.spv shaders/frag.spv
 

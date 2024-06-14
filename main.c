@@ -1316,7 +1316,7 @@ static MemoryTypeIndexResult find_memory_type(
     );
 
     for (uint32_t i = 0; i < mem_properties.memoryTypeCount; ++i) {
-        if (!(type_filter & (1 << i))) {
+        if (!(type_filter & (1U << i))) {
             continue;
         }
 

@@ -18,7 +18,7 @@
 const char *VALIDATION_LAYERS[] = {
     "VK_LAYER_KHRONOS_validation"
 };
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
 
 const char *DEVICE_EXTENSIONS[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -69,7 +69,7 @@ typedef struct {
 
 #ifdef ENABLE_VALIDATION_LAYERS
     VkDebugUtilsMessengerEXT debug_messenger;
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
 
     VkSurfaceKHR surface;
     VkPhysicalDevice physical_device;
@@ -153,7 +153,7 @@ typedef enum {
     HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
     HT_ERROR_SETUP_DEBUG_MESSENGER,
     HT_ERROR_CREATE_INSTANCE_VALIDATION,
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
 } HelloTriangleError;
 
 void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
@@ -270,12 +270,9 @@ static int setup_debug_messenger(HelloTriangleApp *app) {
     
     return 0;
 }
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
 
-static int create_instance(
-    HelloTriangleApp *app,
-    Arena temp_arena
-) {
+static int create_instance(HelloTriangleApp *app, Arena temp_arena) {
 #ifdef ENABLE_VALIDATION_LAYERS
     {
         BoolResult layer_support_result = check_validation_layer_support(
@@ -292,7 +289,7 @@ static int create_instance(
 
     VkDebugUtilsMessengerCreateInfoEXT debug_create_info =
         debug_messenger_create_info();
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
 
     VkApplicationInfo app_info = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -327,7 +324,7 @@ static int create_instance(
 #ifdef ENABLE_VALIDATION_LAYERS
     extensions[extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
     extension_count += 1;
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
 
     VkInstanceCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -338,7 +335,7 @@ static int create_instance(
         .enabledLayerCount = countof(VALIDATION_LAYERS),
         .ppEnabledLayerNames = VALIDATION_LAYERS,
         .pNext = &debug_create_info,
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
     };
 
     VkResult result = vkCreateInstance(&create_info, NULL, &app->instance);
@@ -478,9 +475,7 @@ typedef struct {
     VkPresentModeKHRSlice present_modes;
 } SwapchainSupportDetails;
 
-typedef Result(
-    SwapchainSupportDetails
-) SwapchainSupportDetailsResult;
+typedef Result(SwapchainSupportDetails) SwapchainSupportDetailsResult;
 
 static SwapchainSupportDetailsResult query_swapchain_support(
     HelloTriangleApp *app,
@@ -608,10 +603,7 @@ static BoolResult is_device_suitable(
     return (BoolResult){ .payload = true };
 }
 
-static int pick_physical_device(
-    HelloTriangleApp *app,
-    Arena temp_arena
-) {
+static int pick_physical_device(HelloTriangleApp *app, Arena temp_arena) {
     uint32_t device_count = 0;
     vkEnumeratePhysicalDevices(app->instance, &device_count, NULL);
     if (device_count == 0) {
@@ -648,10 +640,7 @@ static int pick_physical_device(
     return 0;
 }
 
-static int create_logical_device(
-    HelloTriangleApp *app,
-    Arena temp_arena
-) {
+static int create_logical_device(HelloTriangleApp *app, Arena temp_arena) {
     QueueFamilyIndices indices;
     {
         QueueFamilyIndicesResult indices_result = find_queue_families(
@@ -665,7 +654,6 @@ static int create_logical_device(
 
         indices = indices_result.payload;
     }
-
     assert(indices.graphics_family.valid and indices.present_family.valid);
 
     uint32_t queue_families[] = {
@@ -917,10 +905,7 @@ static int create_swapchain(
     return 0;
 }
 
-static int create_image_views(
-    HelloTriangleApp *app,
-    Arena *swapchain_arena
-) {
+static int create_image_views(HelloTriangleApp *app, Arena *swapchain_arena) {
     app->swapchain_image_views.ptr = arena_create_array(
         VkImageView,
         swapchain_arena,
@@ -968,10 +953,7 @@ static int create_image_views(
 
 typedef Result(ByteSlice) ByteSliceResult;
 
-static ByteSliceResult read_file(
-    const char *filename,
-    Arena *perm_arena
-) {
+static ByteSliceResult read_file(const char *filename, Arena *perm_arena) {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
         return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_OPEN };
@@ -1039,10 +1021,7 @@ static VkShaderModuleResult create_shader_module(
     return (VkShaderModuleResult){ .payload = shader_module };
 }
 
-static int create_graphics_pipeline(
-    HelloTriangleApp *app,
-    Arena temp_arena
-) {
+static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
     ByteSlice vert_shader_code;
     {
         ByteSliceResult result = read_file("shaders/vert.spv", &temp_arena);
@@ -1266,10 +1245,7 @@ static int create_graphics_pipeline(
     return 0;
 }
 
-static int create_command_pool(
-    HelloTriangleApp *app,
-    Arena temp_arena
-) {
+static int create_command_pool(HelloTriangleApp *app, Arena temp_arena) {
     QueueFamilyIndices queue_family_indices;
     {
         QueueFamilyIndicesResult result = find_queue_families(
@@ -1796,7 +1772,7 @@ static int init_vulkan(
     if (error != 0) {
         return error;
     }
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
     
     error = create_surface(app);
     if (error != 0) {
@@ -2003,7 +1979,7 @@ static void cleanup(HelloTriangleApp *app) {
         app->debug_messenger,
         NULL
     );
-#endif
+#endif // ENABLE_VALIDATION_LAYERS
 
     vkDestroyInstance(app->instance, NULL);
 
@@ -2050,7 +2026,7 @@ int main(void) {
     }
 
     HelloTriangleApp app = {
-        .width = 640,
+        .width = 480,
         .height = 480,
         .physical_device = VK_NULL_HANDLE,
     };

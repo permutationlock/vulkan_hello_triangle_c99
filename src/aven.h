@@ -29,7 +29,7 @@
 #elif __STDC_VERSION__ >= 199901L
     #define NORETURN
     #ifndef AVEN_MAX_ALIGNMENT
-        #error "define AVEN_MAX_ALIGNMENT to be the target's max alignment"
+        #error "define AVEN_MAX_ALIGNMENT to be the max required alignment"
     #endif
     #define alignof(t) (AVEN_MAX_ALIGNMENT)
 #else

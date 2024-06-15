@@ -28,10 +28,13 @@ const char *DEVICE_EXTENSIONS[] = {
 typedef struct { float pos[2]; float color[3]; } Vertex;
 
 const Vertex VERTICES[] = {
-    { {0.0f, -0.5f}, {1.0f, 0.0f, 0.0f} },
-    { {0.5f, 0.5f}, {0.0f, 1.0f, 0.0f} },
-    { {-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f} }
+    { {-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f} },
+    { {0.5f, -0.5f}, {0.0f, 1.0f, 0.0f} },
+    { {0.5f, 0.5f}, {0.0f, 0.0f, 1.0f} },
+    { {-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f} }
 };
+
+const uint16_t INDICES[] = { 0, 1, 2, 2, 3, 0 };
 
 VkVertexInputBindingDescription VERTEX_BINDING_DESCRIPTIONS[] = {
     {
@@ -89,8 +92,8 @@ typedef struct {
 
     VkBuffer vertex_buffer;
     VkDeviceMemory vertex_buffer_memory;
-    VkBuffer staging_buffer;
-    VkDeviceMemory staging_buffer_memory;
+    VkBuffer index_buffer;
+    VkDeviceMemory index_buffer_memory;
 
     VkCommandPool command_pool;
     VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
@@ -1442,14 +1445,12 @@ static int copy_buffer(
 }
 
 static int create_vertex_buffer(HelloTriangleApp *app) {
-    VkDeviceSize buffer_size = sizeof(VERTICES);
-
     VkBuffer staging_buffer;
     VkDeviceMemory staging_buffer_memory;
 
     int error = create_buffer(
         app,
-        buffer_size,
+        sizeof(VERTICES),
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -1466,17 +1467,17 @@ static int create_vertex_buffer(HelloTriangleApp *app) {
             app->device,
             staging_buffer_memory,
             0,
-            buffer_size,
+            sizeof(VERTICES),
             0,
             &buffer
         );
-        memcpy(buffer, VERTICES, (size_t)buffer_size);
+        memcpy(buffer, VERTICES, (size_t)sizeof(VERTICES));
         vkUnmapMemory(app->device, staging_buffer_memory);
     }
 
     create_buffer(
         app,
-        buffer_size,
+        sizeof(VERTICES),
         VK_BUFFER_USAGE_TRANSFER_DST_BIT |
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -1484,7 +1485,72 @@ static int create_vertex_buffer(HelloTriangleApp *app) {
         &app->vertex_buffer_memory
     );
 
-    error = copy_buffer(app, app->vertex_buffer, staging_buffer, buffer_size);
+    error = copy_buffer(
+        app,
+        app->vertex_buffer,
+        staging_buffer,
+        sizeof(VERTICES)
+    );
+    if (error != 0) {
+        return error;
+    }
+
+    vkDestroyBuffer(app->device, staging_buffer, NULL);
+    vkFreeMemory(app->device, staging_buffer_memory, NULL);
+
+    return 0;
+}
+
+static int create_index_buffer(HelloTriangleApp *app) {
+    VkBuffer staging_buffer;
+    VkDeviceMemory staging_buffer_memory;
+
+    int error = create_buffer(
+        app,
+        sizeof(INDICES),
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &staging_buffer,
+        &staging_buffer_memory
+    );
+    if (error != 0) {
+        return error;
+    }
+
+    {
+        void *data;
+        vkMapMemory(
+            app->device,
+            staging_buffer_memory,
+            0,
+            sizeof(INDICES),
+            0,
+            &data
+        );
+        memcpy(data, INDICES, sizeof(INDICES));
+        vkUnmapMemory(app->device, staging_buffer_memory);
+    }
+
+    error = create_buffer(
+        app,
+        sizeof(INDICES),
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &app->index_buffer,
+        &app->index_buffer_memory
+    );
+    if (error != 0) {
+        return error;
+    }
+
+    error = copy_buffer(
+        app,
+        app->index_buffer,
+        staging_buffer,
+        sizeof(INDICES)
+    );
     if (error != 0) {
         return error;
     }
@@ -1665,8 +1731,15 @@ static int record_command_buffer(
         vertex_buffers,
         offsets
     );
+    
+    vkCmdBindIndexBuffer(
+        command_buffer,
+        app->index_buffer,
+        0,
+        VK_INDEX_TYPE_UINT16
+    );
 
-    vkCmdDraw(command_buffer, countof(VERTICES), 1, 0, 0);
+    vkCmdDrawIndexed(command_buffer, countof(INDICES), 1, 0, 0, 0);
 
     vkCmdEndRendering(command_buffer);
  
@@ -1814,6 +1887,11 @@ static int init_vulkan(
         return error;
     }
 
+    error = create_index_buffer(app);
+    if (error != 0) {
+        return error;
+    }
+
     error = create_command_buffers(app);
     if (error != 0) {
         return error;
@@ -1946,6 +2024,9 @@ static int main_loop(
 
 static void cleanup(HelloTriangleApp *app) {
     cleanup_swapchain(app);
+
+    vkDestroyBuffer(app->device, app->index_buffer, NULL);
+    vkFreeMemory(app->device, app->index_buffer_memory, NULL);
 
     vkDestroyBuffer(app->device, app->vertex_buffer, NULL);
     vkFreeMemory(app->device, app->vertex_buffer_memory, NULL);

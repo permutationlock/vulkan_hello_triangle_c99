@@ -73,7 +73,8 @@ You can also cross-compile a Windows application with [zig cc][18] (or any
 clang toolchain set up with a Windows target).
 
 ```
-make CC="zig cc -target x86_64-windows-gnu" LDFLAGS="-lkernel32 -luser32 -lgdi32"
+make CC="zig cc -target x86_64-windows-gnu" \
+    LDFLAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
 ```
 
 ### Building on Windows
@@ -89,7 +90,7 @@ make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c99 -O2" LDFLAGS="-mwindows"
 Or build and run a Windows app with Zig.
 
 ```
-make CC="zig cc" LDLFAGS="-lkernel32 -luser32 -lgdi32"
+make CC="zig cc" LDLFAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
 mv hello_triangle hello_triangle.exe
 ./hello_triangle.exe
 ```

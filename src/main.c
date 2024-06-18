@@ -8,10 +8,13 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#define AVEN_MAX_ALIGNMENT 16
+#if __STDC_VERSION__ < 201112L
+    #define AVEN_MAX_ALIGNMENT 16
+#endif
 #include "aven.h"
+#include "aven_glm.h"
 
-#define ARENA_SIZE 1024 * 1024 * 8
+#define ARENA_SIZE 1024 * 1024
 #define MAX_FRAMES_IN_FLIGHT 2
 
 #ifdef ENABLE_VALIDATION_LAYERS
@@ -23,15 +26,23 @@ const char *VALIDATION_LAYERS[] = {
 const char *DEVICE_EXTENSIONS[] = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+    VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
+#ifdef ENABLE_VALIDATION_LAYERS
+    VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+#endif
 };
 
-typedef struct { float pos[2]; float color[3]; } Vertex;
+typedef struct {
+    Mat2 view;
+} UniformBufferObject;
+
+typedef struct { Vec2 pos; Vec4 color; } Vertex;
 
 const Vertex VERTICES[] = {
-    { {-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f} },
-    { {0.5f, -0.5f}, {0.0f, 1.0f, 0.0f} },
-    { {0.5f, 0.5f}, {0.0f, 0.0f, 1.0f} },
-    { {-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f} }
+    { .pos = { { -0.5f, -0.5f } }, .color = { { 1.0f, 0.0f, 0.0f } } },
+    { .pos = { {  0.5f, -0.5f } }, .color = { { 0.0f, 1.0f, 0.0f } } },
+    { .pos = { {  0.5f,  0.5f } }, .color = { { 0.0f, 0.0f, 1.0f } } },
+    { .pos = { { -0.5f,  0.5f } }, .color = { { 1.0f, 1.0f, 1.0f } } }
 };
 
 const uint16_t INDICES[] = { 0, 1, 2, 2, 3, 0 };
@@ -87,6 +98,7 @@ typedef struct {
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
 
+    VkDescriptorSetLayout descriptor_set_layout;
     VkPipelineLayout pipeline_layout;
     VkPipeline graphics_pipeline;
 
@@ -94,6 +106,13 @@ typedef struct {
     VkDeviceMemory vertex_buffer_memory;
     VkBuffer index_buffer;
     VkDeviceMemory index_buffer_memory;
+
+    VkBuffer uniform_buffers[MAX_FRAMES_IN_FLIGHT];
+    VkDeviceMemory uniform_buffers_memory[MAX_FRAMES_IN_FLIGHT];
+    void *uniform_buffers_mapped[MAX_FRAMES_IN_FLIGHT];
+
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet descriptor_sets[MAX_FRAMES_IN_FLIGHT];
 
     VkCommandPool command_pool;
     VkCommandBuffer command_buffers[MAX_FRAMES_IN_FLIGHT];
@@ -152,6 +171,9 @@ typedef enum {
     HT_ERROR_COPY_BUFFER_ALLOCATE,
     HT_ERROR_COPY_BUFFER_COMMAND,
     HT_ERROR_COPY_BUFFER_SUBMIT,
+    HT_ERROR_CREATE_DESCRIPTOR_SET_LAYOUT,
+    HT_ERROR_CREATE_DESCRIPTOR_POOL,
+    HT_ERROR_CREATE_DESCRIPTOR_SETS,
 #ifdef ENABLE_VALIDATION_LAYERS
     HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
     HT_ERROR_SETUP_DEBUG_MESSENGER,
@@ -248,7 +270,8 @@ static VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info(void) {
         .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
         .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
@@ -681,9 +704,15 @@ static int create_logical_device(HelloTriangleApp *app, Arena temp_arena) {
 
     VkPhysicalDeviceFeatures device_features = { 0 };
 
+    VkPhysicalDeviceScalarBlockLayoutFeaturesEXT scalar_layout_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
+        .scalarBlockLayout = VK_TRUE,
+    };
+
     VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {
         .sType =
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+        .pNext = &scalar_layout_features,
         .dynamicRendering = VK_TRUE,
     };
 
@@ -1024,6 +1053,32 @@ static VkShaderModuleResult create_shader_module(
     return (VkShaderModuleResult){ .payload = shader_module };
 }
 
+static int create_descriptor_set_layout(HelloTriangleApp *app) {
+    VkDescriptorSetLayoutBinding ubo_layout_binding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    };
+    VkDescriptorSetLayoutCreateInfo layout_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &ubo_layout_binding,
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(
+        app->device,
+        &layout_info,
+        NULL,
+        &app->descriptor_set_layout
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_CREATE_DESCRIPTOR_SET_LAYOUT;
+    }
+
+    return 0;
+}
+
 static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
     ByteSlice vert_shader_code;
     {
@@ -1188,8 +1243,8 @@ static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
 
     VkPipelineLayoutCreateInfo pipeline_layout_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pSetLayouts = NULL,
+        .setLayoutCount = 1,
+        .pSetLayouts = &app->descriptor_set_layout,
         .pushConstantRangeCount = 0,
         .pPushConstantRanges = NULL,
     };
@@ -1626,6 +1681,104 @@ static int create_sync_objects(HelloTriangleApp *app) {
     return 0;
 }
 
+static int create_uniform_buffers(HelloTriangleApp *app) {
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        int error = create_buffer(
+            app,
+            sizeof(UniformBufferObject),
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &app->uniform_buffers[i],
+            &app->uniform_buffers_memory[i]
+        );
+        if (error != 0) {
+            return error;
+        }
+
+        vkMapMemory(
+            app->device,
+            app->uniform_buffers_memory[i],
+            0,
+            sizeof(UniformBufferObject),
+            0,
+            &app->uniform_buffers_mapped[i]
+        );
+    }
+
+    return 0;
+}
+
+static int create_descriptor_pool(HelloTriangleApp *app) {
+    VkDescriptorPoolSize pool_size = {
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+    };
+    VkDescriptorPoolCreateInfo pool_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .poolSizeCount = 1,
+        .pPoolSizes = &pool_size,
+        .maxSets = MAX_FRAMES_IN_FLIGHT,
+    };
+
+    VkResult result = vkCreateDescriptorPool(
+        app->device,
+        &pool_info,
+        NULL,
+        &app->descriptor_pool
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_CREATE_DESCRIPTOR_POOL;
+    }
+
+    return 0;
+}
+
+static int create_descriptor_sets(HelloTriangleApp *app) {
+    VkDescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT];
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        layouts[i] = app->descriptor_set_layout;
+    }
+
+    VkDescriptorSetAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = app->descriptor_pool,
+        .descriptorSetCount = MAX_FRAMES_IN_FLIGHT,
+        .pSetLayouts = layouts,
+    };
+
+    VkResult result = vkAllocateDescriptorSets(
+        app->device,
+        &alloc_info,
+        app->descriptor_sets
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_CREATE_DESCRIPTOR_SETS;
+    }
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        VkDescriptorBufferInfo buffer_info = {
+            .buffer = app->uniform_buffers[i],
+            .offset = 0,
+            .range = sizeof(UniformBufferObject),
+        };
+        
+        VkWriteDescriptorSet descriptor_write = {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = app->descriptor_sets[i],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .pBufferInfo = &buffer_info,
+        };
+
+        vkUpdateDescriptorSets(app->device, 1, &descriptor_write, 0, NULL);
+    }
+
+    return 0;
+}
+
 static int record_command_buffer(
     HelloTriangleApp *app,
     VkCommandBuffer command_buffer,
@@ -1739,6 +1892,17 @@ static int record_command_buffer(
         VK_INDEX_TYPE_UINT16
     );
 
+    vkCmdBindDescriptorSets(
+        command_buffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        app->pipeline_layout,
+        0,
+        1,
+        &app->descriptor_sets[app->current_frame],
+        0,
+        NULL
+    );
+
     vkCmdDrawIndexed(command_buffer, countof(INDICES), 1, 0, 0, 0);
 
     vkCmdEndRendering(command_buffer);
@@ -1791,6 +1955,22 @@ static void cleanup_swapchain(HelloTriangleApp *app) {
     vkDestroySwapchainKHR(app->device, app->swapchain, NULL);
 }
 
+static void update_uniform_buffer(
+    HelloTriangleApp *app,
+    uint32_t current_image
+) {
+    float width = (float)app->swapchain_extent.width;
+    float height = (float)app->swapchain_extent.height;
+    float side = min(width, height);
+    UniformBufferObject ubo = {
+        .view = {
+            { { { side / width, 0.0f } }, { { 0.0f, side / height } } }
+        },
+    };
+
+    memcpy(app->uniform_buffers_mapped[current_image], &ubo, sizeof(ubo));
+}
+
 static int recreate_swapchain(
     HelloTriangleApp *app,
     Arena *swapchain_arena,
@@ -1808,6 +1988,9 @@ static int recreate_swapchain(
     }
 
     vkDeviceWaitIdle(app->device);
+
+    app->width = (uint32_t)width;
+    app->height = (uint32_t)height;
 
     cleanup_swapchain(app);
     *swapchain_arena = app->base_swapchain_arena;
@@ -1872,6 +2055,11 @@ static int init_vulkan(
         return error;
     }
 
+    error = create_descriptor_set_layout(app);
+    if (error != 0) {
+        return error;
+    }
+
     error = create_graphics_pipeline(app, temp_arena);
     if (error != 0) {
         return error;
@@ -1888,6 +2076,21 @@ static int init_vulkan(
     }
 
     error = create_index_buffer(app);
+    if (error != 0) {
+        return error;
+    }
+
+    error = create_uniform_buffers(app);
+    if (error != 0) {
+        return error;
+    }
+
+    error = create_descriptor_pool(app);
+    if (error != 0) {
+        return error;
+    }
+
+    error = create_descriptor_sets(app);
     if (error != 0) {
         return error;
     }
@@ -1932,6 +2135,8 @@ static int draw_frame(
     } else if (result != VK_SUCCESS and result != VK_SUBOPTIMAL_KHR) {
         return HT_ERROR_DRAW_FRAME_SWAPCHAIN;
     }
+
+    update_uniform_buffer(app, app->current_frame);
 
     vkResetFences(app->device, 1, &app->in_flight_fences[app->current_frame]);
 
@@ -2024,6 +2229,15 @@ static int main_loop(
 
 static void cleanup(HelloTriangleApp *app) {
     cleanup_swapchain(app);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+        vkDestroyBuffer(app->device, app->uniform_buffers[i], NULL);
+        vkFreeMemory(app->device, app->uniform_buffers_memory[i], NULL);
+    }
+
+    vkDestroyDescriptorPool(app->device, app->descriptor_pool, NULL);
+
+    vkDestroyDescriptorSetLayout(app->device, app->descriptor_set_layout, NULL);
 
     vkDestroyBuffer(app->device, app->index_buffer, NULL);
     vkFreeMemory(app->device, app->index_buffer_memory, NULL);

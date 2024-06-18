@@ -15,7 +15,7 @@
     #define assert(c) while (!(c)) { __builtin_unreachable(); }
 #else
     #define assert(c)
-    #define __attribute(a)
+    #define __attribute__(a)
 #endif
 
 #define countof(array) (sizeof(array) / sizeof(*array))
@@ -49,14 +49,23 @@ typedef struct {
 
 #ifndef AVEN_NO_FUNCTIONS
     #ifdef __GNUC__
-        static size_t aven_verify_index_internal(size_t index, size_t len) {
-            assert(index < len);
-            return index;
+        static size_t aven_assert_smaller_internal(size_t a, size_t b) {
+            assert(a < b);
+            return a;
         }
 
-        #define slice_get(s, i) (s.ptr[aven_verify_index_internal(i, s.len)])
+        #define slice_get(s, i) (s.ptr[aven_assert_smaller_internal(i, s.len)])
+        #define slice_copy(d, s) memcpy( \
+                d.ptr, \
+                s.ptr, \
+                aven_assert_smaller_internal( \
+                    sizeof(*s.ptr) * s.len, \
+                    sizeof(*d.ptr) * d.len + 1 \
+                ) \
+            )
     #else
         #define slice_get(s, i) (s.ptr[i])
+        #define slice_copy(d, s) memcpy(d.ptr, s.ptr, sizeof(*s.ptr) * s.len)
     #endif
 
     #define as_bytes(ptr) ((ByteSlice){ \
@@ -72,7 +81,7 @@ typedef struct {
         return (Arena){ .base = mem, .top = (unsigned char *)mem + size };
     }
 
-    __attribute((malloc, alloc_size(2), alloc_align(3)))
+    __attribute__((malloc, alloc_size(2), alloc_align(3)))
     void *arena_alloc(Arena *arena, size_t size, size_t align);
 
     #define arena_create(t, a) (t *)arena_alloc(a, sizeof(t), alignof(t))

@@ -16,10 +16,10 @@ INCLUDEFLAGS = -Ideps/glfw/include -Ideps/volk/include -Ideps/vulkan/include \
 LDFLAGS = -lm -ldl -lpthread
 
 .PHONY: all shaders clean cleanobj cleanshaders run
-all: hello_triangle shaders
+all: vulkan_app shaders
 clean: cleanobjects cleanshaders
 
-hello_triangle: src/main.o src/aven.o deps/glfw/glfw.o
+vulkan_app: src/main.o src/aven.o deps/glfw/glfw.o
 	$(CC) $(CFLAGS) $(INCLUDEFLAGS) $(LDFLAGS) -o $@ $^
 src/main.o: src/main.c
 	$(CC) $(CFLAGS) $(INCLUDEFLAGS) -c -o $@ $<
@@ -28,7 +28,7 @@ src/aven.o: src/aven.c
 deps/glfw/glfw.o: deps/glfw/glfw.c	
 	$(CC) $(GLFW_CFLAGS) $(INCLUDEFLAGS) -c -o $@ $<
 cleanobjects:
-	rm -f hello_triangle* src/main.o src/aven.o deps/glfw/glfw.o
+	rm -f vulkan_app* src/main.o src/aven.o deps/glfw/glfw.o
 
 shaders: shaders/vert.spv shaders/frag.spv
 shaders/vert.spv: shaders/base.vert
@@ -38,6 +38,6 @@ shaders/frag.spv: shaders/base.frag
 cleanshaders:
 	rm -f shaders/vert.spv shaders/frag.spv
 
-run: hello_triangle shaders
+run: vulkan_app shaders
 	VK_LAYER_ENABLES="VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT" \
-		VK_KHRONOS_VALIDATION_PRINTF_TO_STDOUT=1 ./hello_triangle
+		VK_KHRONOS_VALIDATION_PRINTF_TO_STDOUT=1 ./vulkan_app

@@ -1,8 +1,8 @@
 #ifndef AVEN_H
 #define AVEN_H
 
-#include <iso646.h>
 #include <stddef.h>
+#include <iso646.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -15,7 +15,6 @@
     #define assert(c) while (!(c)) { __builtin_unreachable(); }
 #else
     #define assert(c)
-    #define __attribute__(a)
 #endif
 
 #define countof(array) (sizeof(array) / sizeof(*array))
@@ -81,7 +80,9 @@ typedef struct {
         return (Arena){ .base = mem, .top = (unsigned char *)mem + size };
     }
 
-    __attribute__((malloc, alloc_size(2), alloc_align(3)))
+    #ifdef __GNUC__
+        __attribute__((malloc, alloc_size(2), alloc_align(3)))
+    #endif
     void *arena_alloc(Arena *arena, size_t size, size_t align);
 
     #define arena_create(t, a) (t *)arena_alloc(a, sizeof(t), alignof(t))

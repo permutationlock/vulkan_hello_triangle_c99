@@ -1,20 +1,20 @@
+#if __STDC_VERSION__ < 201112L
+    #define AVEN_MAX_ALIGNMENT 16
+#endif
+#include "aven.h"
+#include "aven_glm.h"
+#include "aven_time.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #define VOLK_IMPLEMENTATION
 #include <volk.h>
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
-
-#if __STDC_VERSION__ < 201112L
-    #define AVEN_MAX_ALIGNMENT 16
-#endif
-#include "aven.h"
-#include "aven_glm.h"
 
 #define ARENA_SIZE 1024 * 1024
 #define MAX_FRAMES_IN_FLIGHT 2
@@ -133,77 +133,77 @@ typedef struct {
     uint32_t current_frame;
     bool framebuffer_resized;
 
-    time_t last_update;
+    TimeSpec last_update;
     float rotation_angle;
-} HelloTriangleApp;
+} VulkanApp;
 
 typedef enum {
-    HT_ERROR_NONE = 0,
-    HT_ERROR_MAIN_MALLOC,
-    HT_ERROR_INIT_WINDOW,
-    HT_ERROR_INIT_VULKAN_VOLK,
-    HT_ERROR_CREATE_INSTANCE_ALLOC,
-    HT_ERROR_CREATE_INSTANCE_CREATE,
-    HT_ERROR_CREATE_SURFACE,
-    HT_ERROR_FIND_QUEUE_FAMILIES_ALLOC,
-    HT_ERROR_CHECK_DEVICE_EXTENSION_SUPPORT_ALLOC,
-    HT_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC,
-    HT_ERROR_PICK_PHYSICAL_DEVICE_ENUMERATE,
-    HT_ERROR_PICK_PHYSICAL_DEVICE_ALLOC,
-    HT_ERROR_PICK_PHYSICAL_DEVICE_SUITABLE,
-    HT_ERROR_CREATE_LOGICAL_DEVICE,
-    HT_ERROR_CREATE_SWAP_CHAIN_CREATE,
-    HT_ERROR_CREATE_SWAP_CHAIN_ALLOC,
-    HT_ERROR_CREATE_IMAGE_VIEWS_ALLOC,
-    HT_ERROR_CREATE_IMAGE_VIEWS_CREATE,
-    HT_ERROR_READ_FILE_OPEN,
-    HT_ERROR_READ_FILE_SEEK,
-    HT_ERROR_READ_FILE_TELL,
-    HT_ERROR_READ_FILE_ALLOC,
-    HT_ERROR_READ_FILE_READ,
-    HT_ERROR_CREATE_SHADER_MODULE,
-    HT_ERROR_CREATE_RENDER_PASS,
-    HT_ERROR_CREATE_GRAPHICS_PIPELINE_LAYOUT,
-    HT_ERROR_CREATE_GRAPHICS_PIPELINE_CREATE,
-    HT_ERROR_CREATE_FRAMEBUFFER_ALLOC,
-    HT_ERROR_CREATE_FRAMEBUFFER_CREATE,
-    HT_ERROR_CREATE_COMMAND_POOL,
-    HT_ERROR_CREATE_COMMAND_BUFFER,
-    HT_ERROR_RECORD_COMMAND_BUFFER_BEGIN,
-    HT_ERROR_RECORD_COMMAND_BUFFER_END,
-    HT_ERROR_CREATE_SYNC_OBJECTS_AVAILABLE,
-    HT_ERROR_CREATE_SYNC_OBJECTS_FINISHED,
-    HT_ERROR_CREATE_SYNC_OBJECTS_FENCE,
-    HT_ERROR_DRAW_FRAME_SWAPCHAIN,
-    HT_ERRROR_DRAW_FRAME_SUBMIT,
-    HT_ERROR_FIND_MEMORY_TYPE,
-    HT_ERROR_CREATE_BUFFER_CREATE,
-    HT_ERROR_CREATE_BUFFER_MEMORY,
-    HT_ERROR_COPY_BUFFER_ALLOCATE,
-    HT_ERROR_COPY_BUFFER_COMMAND,
-    HT_ERROR_COPY_BUFFER_SUBMIT,
-    HT_ERROR_CREATE_DESCRIPTOR_SET_LAYOUT,
-    HT_ERROR_CREATE_DESCRIPTOR_POOL,
-    HT_ERROR_CREATE_DESCRIPTOR_SETS,
-    HT_ERROR_CREATE_COLOR_RESOURCES_CREATE,
-    HT_ERROR_CREATE_COLOR_RESOURCES_ALLOC,
-    HT_ERROR_MAIN_LOOP_TIME,
+    APP_ERROR_NONE = 0,
+    APP_ERROR_MAIN_MALLOC,
+    APP_ERROR_INIT_WINDOW,
+    APP_ERROR_INIT_VULKAN_VOLK,
+    APP_ERROR_CREATE_INSTANCE_ALLOC,
+    APP_ERROR_CREATE_INSTANCE_CREATE,
+    APP_ERROR_CREATE_SURFACE,
+    APP_ERROR_FIND_QUEUE_FAMILIES_ALLOC,
+    APP_ERROR_CHECK_DEVICE_EXTENSION_SUPPORT_ALLOC,
+    APP_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC,
+    APP_ERROR_PICK_PHYSICAL_DEVICE_ENUMERATE,
+    APP_ERROR_PICK_PHYSICAL_DEVICE_ALLOC,
+    APP_ERROR_PICK_PHYSICAL_DEVICE_SUITABLE,
+    APP_ERROR_CREATE_LOGICAL_DEVICE,
+    APP_ERROR_CREATE_SWAP_CHAIN_CREATE,
+    APP_ERROR_CREATE_SWAP_CHAIN_ALLOC,
+    APP_ERROR_CREATE_IMAGE_VIEWS_ALLOC,
+    APP_ERROR_CREATE_IMAGE_VIEWS_CREATE,
+    APP_ERROR_READ_FILE_OPEN,
+    APP_ERROR_READ_FILE_SEEK,
+    APP_ERROR_READ_FILE_TELL,
+    APP_ERROR_READ_FILE_ALLOC,
+    APP_ERROR_READ_FILE_READ,
+    APP_ERROR_CREATE_SHADER_MODULE,
+    APP_ERROR_CREATE_RENDER_PASS,
+    APP_ERROR_CREATE_GRAPHICS_PIPELINE_LAYOUT,
+    APP_ERROR_CREATE_GRAPHICS_PIPELINE_CREATE,
+    APP_ERROR_CREATE_FRAMEBUFFER_ALLOC,
+    APP_ERROR_CREATE_FRAMEBUFFER_CREATE,
+    APP_ERROR_CREATE_COMMAND_POOL,
+    APP_ERROR_CREATE_COMMAND_BUFFER,
+    APP_ERROR_RECORD_COMMAND_BUFFER_BEGIN,
+    APP_ERROR_RECORD_COMMAND_BUFFER_END,
+    APP_ERROR_CREATE_SYNC_OBJECTS_AVAILABLE,
+    APP_ERROR_CREATE_SYNC_OBJECTS_FINISHED,
+    APP_ERROR_CREATE_SYNC_OBJECTS_FENCE,
+    APP_ERROR_DRAW_FRAME_SWAPCHAIN,
+    APP_ERROR_DRAW_FRAME_SUBMIT,
+    APP_ERROR_FIND_MEMORY_TYPE,
+    APP_ERROR_CREATE_BUFFER_CREATE,
+    APP_ERROR_CREATE_BUFFER_MEMORY,
+    APP_ERROR_COPY_BUFFER_ALLOCATE,
+    APP_ERROR_COPY_BUFFER_COMMAND,
+    APP_ERROR_COPY_BUFFER_SUBMIT,
+    APP_ERROR_CREATE_DESCRIPTOR_SET_LAYOUT,
+    APP_ERROR_CREATE_DESCRIPTOR_POOL,
+    APP_ERROR_CREATE_DESCRIPTOR_SETS,
+    APP_ERROR_CREATE_COLOR_RESOURCES_CREATE,
+    APP_ERROR_CREATE_COLOR_RESOURCES_ALLOC,
+    APP_ERROR_MAIN_LOOP_TIME,
 #ifdef ENABLE_VALIDATION_LAYERS
-    HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
-    HT_ERROR_SETUP_DEBUG_MESSENGER,
-    HT_ERROR_CREATE_INSTANCE_VALIDATION,
+    APP_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
+    APP_ERROR_SETUP_DEBUG_MESSENGER,
+    APP_ERROR_CREATE_INSTANCE_VALIDATION,
 #endif // ENABLE_VALIDATION_LAYERS
-} HelloTriangleError;
+} VulkanAppError;
 
 void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
     (void)width;
     (void)height;
 
-    HelloTriangleApp *app = glfwGetWindowUserPointer(window);
+    VulkanApp *app = glfwGetWindowUserPointer(window);
     app->framebuffer_resized = true;
 }
 
-static int init_window(HelloTriangleApp *app) {
+static int init_window(VulkanApp *app) {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -215,7 +215,7 @@ static int init_window(HelloTriangleApp *app) {
         NULL
     );
     if (app->window == NULL) {
-        return HT_ERROR_INIT_WINDOW;
+        return APP_ERROR_INIT_WINDOW;
     }
 
     glfwSetWindowUserPointer(app->window, app);
@@ -253,7 +253,7 @@ static BoolResult check_validation_layer_support(Arena temp_arena) {
     );
     if (available_layers == NULL) {
         return (BoolResult){
-            .error = HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC
+            .error = APP_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC
         };
     }
 
@@ -294,7 +294,7 @@ static VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info(void) {
     };
 }
 
-static int setup_debug_messenger(HelloTriangleApp *app) {
+static int setup_debug_messenger(VulkanApp *app) {
     VkDebugUtilsMessengerCreateInfoEXT create_info =
         debug_messenger_create_info();
 
@@ -305,14 +305,14 @@ static int setup_debug_messenger(HelloTriangleApp *app) {
         &app->debug_messenger
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_SETUP_DEBUG_MESSENGER;
+        return APP_ERROR_SETUP_DEBUG_MESSENGER;
     }
     
     return 0;
 }
 #endif // ENABLE_VALIDATION_LAYERS
 
-static int create_instance(HelloTriangleApp *app, Arena temp_arena) {
+static int create_instance(VulkanApp *app, Arena temp_arena) {
 #ifdef ENABLE_VALIDATION_LAYERS
     {
         BoolResult layer_support_result = check_validation_layer_support(
@@ -323,7 +323,7 @@ static int create_instance(HelloTriangleApp *app, Arena temp_arena) {
         }
 
         if (!layer_support_result.payload) {
-            return HT_ERROR_CREATE_INSTANCE_VALIDATION;
+            return APP_ERROR_CREATE_INSTANCE_VALIDATION;
         }
     }
 
@@ -352,7 +352,7 @@ static int create_instance(HelloTriangleApp *app, Arena temp_arena) {
         extension_count
     );
     if (extensions == NULL) {
-        return HT_ERROR_CREATE_INSTANCE_ALLOC;
+        return APP_ERROR_CREATE_INSTANCE_ALLOC;
     }
 
     memcpy(
@@ -380,7 +380,7 @@ static int create_instance(HelloTriangleApp *app, Arena temp_arena) {
 
     VkResult result = vkCreateInstance(&create_info, NULL, &app->instance);
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_INSTANCE_CREATE;
+        return APP_ERROR_CREATE_INSTANCE_CREATE;
     }
 
     volkLoadInstanceOnly(app->instance);
@@ -388,7 +388,7 @@ static int create_instance(HelloTriangleApp *app, Arena temp_arena) {
     return 0;
 }
 
-static int create_surface(HelloTriangleApp *app) {
+static int create_surface(VulkanApp *app) {
     VkResult result = glfwCreateWindowSurface(
         app->instance,
         app->window,
@@ -396,7 +396,7 @@ static int create_surface(HelloTriangleApp *app) {
         &app->surface
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_SURFACE;
+        return APP_ERROR_CREATE_SURFACE;
     }
 
     return 0;
@@ -410,7 +410,7 @@ typedef struct {
 typedef Result(QueueFamilyIndices) QueueFamilyIndicesResult;
 
 static QueueFamilyIndicesResult find_queue_families(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     VkPhysicalDevice device,
     Arena temp_arena
 ) {
@@ -425,7 +425,7 @@ static QueueFamilyIndicesResult find_queue_families(
     );
     if (queue_families == NULL) {
         return (QueueFamilyIndicesResult){
-            .error = HT_ERROR_FIND_QUEUE_FAMILIES_ALLOC
+            .error = APP_ERROR_FIND_QUEUE_FAMILIES_ALLOC
         };
     }
 
@@ -475,7 +475,7 @@ static BoolResult check_device_extension_support(
     );
     if (available_extensions == NULL) {
         return (BoolResult){
-            .error = HT_ERROR_CHECK_DEVICE_EXTENSION_SUPPORT_ALLOC
+            .error = APP_ERROR_CHECK_DEVICE_EXTENSION_SUPPORT_ALLOC
         };
     }
  
@@ -518,7 +518,7 @@ typedef struct {
 typedef Result(SwapchainSupportDetails) SwapchainSupportDetailsResult;
 
 static SwapchainSupportDetailsResult query_swapchain_support(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     VkPhysicalDevice device,
     Arena *perm_arena
 ) {
@@ -546,7 +546,7 @@ static SwapchainSupportDetailsResult query_swapchain_support(
         );
         if (details.formats.ptr == NULL) {
             return (SwapchainSupportDetailsResult){
-                .error = HT_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC
+                .error = APP_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC
             };
         }
 
@@ -575,7 +575,7 @@ static SwapchainSupportDetailsResult query_swapchain_support(
         );
         if (details.present_modes.ptr == NULL) {
             return (SwapchainSupportDetailsResult){
-                .error = HT_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC
+                .error = APP_ERROR_QUERY_SWAP_CHAIN_SUPPORT_ALLOC
             };
         }
 
@@ -592,7 +592,7 @@ static SwapchainSupportDetailsResult query_swapchain_support(
 }
 
 static BoolResult is_device_suitable(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     VkPhysicalDevice device,
     Arena temp_arena
 ) {
@@ -643,7 +643,7 @@ static BoolResult is_device_suitable(
     return (BoolResult){ .payload = true };
 }
 
-static VkSampleCountFlagBits get_max_sample_count(HelloTriangleApp *app) {
+static VkSampleCountFlagBits get_max_sample_count(VulkanApp *app) {
     VkPhysicalDeviceProperties physical_device_properties;
     vkGetPhysicalDeviceProperties(
         app->physical_device,
@@ -664,11 +664,11 @@ static VkSampleCountFlagBits get_max_sample_count(HelloTriangleApp *app) {
     return VK_SAMPLE_COUNT_1_BIT;
 }
 
-static int pick_physical_device(HelloTriangleApp *app, Arena temp_arena) {
+static int pick_physical_device(VulkanApp *app, Arena temp_arena) {
     uint32_t device_count = 0;
     vkEnumeratePhysicalDevices(app->instance, &device_count, NULL);
     if (device_count == 0) {
-        return HT_ERROR_PICK_PHYSICAL_DEVICE_ENUMERATE;
+        return APP_ERROR_PICK_PHYSICAL_DEVICE_ENUMERATE;
     }
 
     VkPhysicalDevice *devices = arena_create_array(
@@ -677,7 +677,7 @@ static int pick_physical_device(HelloTriangleApp *app, Arena temp_arena) {
         device_count
     );
     if (devices == NULL) {
-        return HT_ERROR_PICK_PHYSICAL_DEVICE_ALLOC;
+        return APP_ERROR_PICK_PHYSICAL_DEVICE_ALLOC;
     }
 
     vkEnumeratePhysicalDevices(app->instance, &device_count, devices);
@@ -696,13 +696,13 @@ static int pick_physical_device(HelloTriangleApp *app, Arena temp_arena) {
     }
 
     if (app->physical_device == VK_NULL_HANDLE) {
-        return HT_ERROR_PICK_PHYSICAL_DEVICE_SUITABLE;
+        return APP_ERROR_PICK_PHYSICAL_DEVICE_SUITABLE;
     }
 
     return 0;
 }
 
-static int create_logical_device(HelloTriangleApp *app, Arena temp_arena) {
+static int create_logical_device(VulkanApp *app, Arena temp_arena) {
     QueueFamilyIndices indices;
     {
         QueueFamilyIndicesResult indices_result = find_queue_families(
@@ -769,7 +769,7 @@ static int create_logical_device(HelloTriangleApp *app, Arena temp_arena) {
         &app->device
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_LOGICAL_DEVICE;
+        return APP_ERROR_CREATE_LOGICAL_DEVICE;
     }
 
     volkLoadDevice(app->device);
@@ -820,7 +820,7 @@ static VkPresentModeKHR choose_swap_present_mode(
 }
 
 static VkExtent2D choose_swap_extent(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     VkSurfaceCapabilitiesKHR *capabilities
 ) {
     if (capabilities->currentExtent.width != UINT32_MAX) {
@@ -855,7 +855,7 @@ static VkExtent2D choose_swap_extent(
 }
 
 static int create_swapchain(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
@@ -946,7 +946,7 @@ static int create_swapchain(
         &app->swapchain
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_SWAP_CHAIN_CREATE;
+        return APP_ERROR_CREATE_SWAP_CHAIN_CREATE;
     }
 
     vkGetSwapchainImagesKHR(app->device, app->swapchain, &image_count, NULL);
@@ -957,7 +957,7 @@ static int create_swapchain(
         image_count
     );
     if (app->swapchain_images.ptr == NULL) {
-        return HT_ERROR_CREATE_SWAP_CHAIN_ALLOC;
+        return APP_ERROR_CREATE_SWAP_CHAIN_ALLOC;
     }
 
     vkGetSwapchainImagesKHR(
@@ -974,7 +974,7 @@ static int create_swapchain(
     return 0;
 }
 
-static int create_image_views(HelloTriangleApp *app, Arena *swapchain_arena) {
+static int create_image_views(VulkanApp *app, Arena *swapchain_arena) {
     app->swapchain_image_views.ptr = arena_create_array(
         VkImageView,
         swapchain_arena,
@@ -982,7 +982,7 @@ static int create_image_views(HelloTriangleApp *app, Arena *swapchain_arena) {
     );
     app->swapchain_image_views.len = app->swapchain_images.len;
     if (app->swapchain_image_views.ptr == NULL) {
-        return HT_ERROR_CREATE_IMAGE_VIEWS_ALLOC;
+        return APP_ERROR_CREATE_IMAGE_VIEWS_ALLOC;
     }
 
     for (size_t i = 0; i < app->swapchain_images.len; ++i) {
@@ -1013,7 +1013,7 @@ static int create_image_views(HelloTriangleApp *app, Arena *swapchain_arena) {
             &slice_get(app->swapchain_image_views, i)
         );
         if (result != VK_SUCCESS) {
-            return HT_ERROR_CREATE_IMAGE_VIEWS_CREATE;
+            return APP_ERROR_CREATE_IMAGE_VIEWS_CREATE;
         }
     }
 
@@ -1025,19 +1025,19 @@ typedef Result(ByteSlice) ByteSliceResult;
 static ByteSliceResult read_file(const char *filename, Arena *perm_arena) {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
-        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_OPEN };
+        return (ByteSliceResult){ .error = APP_ERROR_READ_FILE_OPEN };
     }
 
     int error = fseek(file, 0L, SEEK_END);
     if (error != 0) {
         fclose(file);
-        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_SEEK };
+        return (ByteSliceResult){ .error = APP_ERROR_READ_FILE_SEEK };
     }
 
     long len = ftell(file);
     if (len < 0) {
         fclose(file);
-        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_TELL };
+        return (ByteSliceResult){ .error = APP_ERROR_READ_FILE_TELL };
     }
 
     rewind(file);
@@ -1048,7 +1048,7 @@ static ByteSliceResult read_file(const char *filename, Arena *perm_arena) {
     };
     if (bytes.ptr == NULL) {
         fclose(file);
-        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_ALLOC };
+        return (ByteSliceResult){ .error = APP_ERROR_READ_FILE_ALLOC };
     }
     
     size_t bytes_read = fread(bytes.ptr, 1, bytes.len, file);
@@ -1056,7 +1056,7 @@ static ByteSliceResult read_file(const char *filename, Arena *perm_arena) {
     fclose(file);
 
     if (bytes_read != bytes.len) {
-        return (ByteSliceResult){ .error = HT_ERROR_READ_FILE_READ };
+        return (ByteSliceResult){ .error = APP_ERROR_READ_FILE_READ };
     }
 
     return (ByteSliceResult){ .payload = bytes };
@@ -1065,7 +1065,7 @@ static ByteSliceResult read_file(const char *filename, Arena *perm_arena) {
 typedef Result(VkShaderModule) VkShaderModuleResult;
 
 static VkShaderModuleResult create_shader_module(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     ByteSlice code
 ) {
     VkShaderModuleCreateInfo create_info = {
@@ -1083,14 +1083,14 @@ static VkShaderModuleResult create_shader_module(
     );
     if (result != VK_SUCCESS) {
         return (VkShaderModuleResult){
-            .error = HT_ERROR_CREATE_SHADER_MODULE
+            .error = APP_ERROR_CREATE_SHADER_MODULE
         };
     }
 
     return (VkShaderModuleResult){ .payload = shader_module };
 }
 
-static int create_descriptor_set_layout(HelloTriangleApp *app) {
+static int create_descriptor_set_layout(VulkanApp *app) {
     VkDescriptorSetLayoutBinding ubo_layout_binding = {
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -1110,13 +1110,13 @@ static int create_descriptor_set_layout(HelloTriangleApp *app) {
         &app->descriptor_set_layout
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_DESCRIPTOR_SET_LAYOUT;
+        return APP_ERROR_CREATE_DESCRIPTOR_SET_LAYOUT;
     }
 
     return 0;
 }
 
-static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
+static int create_graphics_pipeline(VulkanApp *app, Arena temp_arena) {
     ByteSlice vert_shader_code;
     {
         ByteSliceResult result = read_file("shaders/vert.spv", &temp_arena);
@@ -1289,13 +1289,17 @@ static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
         &app->pipeline_layout
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_GRAPHICS_PIPELINE_LAYOUT;
+        return APP_ERROR_CREATE_GRAPHICS_PIPELINE_LAYOUT;
     }
+
+    VkFormat attachment_formats[] = {
+        app->swapchain_image_format
+    };
 
     VkPipelineRenderingCreateInfoKHR pipeline_rendering_create_info = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &app->swapchain_image_format,
+        .colorAttachmentCount = countof(attachment_formats),
+        .pColorAttachmentFormats = attachment_formats,
     };
 
     VkGraphicsPipelineCreateInfo pipeline_info = {
@@ -1327,7 +1331,7 @@ static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
         &app->graphics_pipeline
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_GRAPHICS_PIPELINE_CREATE;
+        return APP_ERROR_CREATE_GRAPHICS_PIPELINE_CREATE;
     }
 
     vkDestroyShaderModule(app->device, frag_shader_module, NULL);
@@ -1336,7 +1340,7 @@ static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
     return 0;
 }
 
-static int create_command_pool(HelloTriangleApp *app, Arena temp_arena) {
+static int create_command_pool(VulkanApp *app, Arena temp_arena) {
     QueueFamilyIndices queue_family_indices;
     {
         QueueFamilyIndicesResult result = find_queue_families(
@@ -1363,7 +1367,7 @@ static int create_command_pool(HelloTriangleApp *app, Arena temp_arena) {
         &app->command_pool
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_COMMAND_POOL;
+        return APP_ERROR_CREATE_COMMAND_POOL;
     }
 
     return 0;
@@ -1372,7 +1376,7 @@ static int create_command_pool(HelloTriangleApp *app, Arena temp_arena) {
 typedef Result(uint32_t) MemoryTypeIndexResult;
 
 static MemoryTypeIndexResult find_memory_type(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     uint32_t type_filter,
     VkMemoryPropertyFlags properties
 ) {
@@ -1394,10 +1398,10 @@ static MemoryTypeIndexResult find_memory_type(
         }
     }
 
-    return (MemoryTypeIndexResult){ .error = HT_ERROR_FIND_MEMORY_TYPE };
+    return (MemoryTypeIndexResult){ .error = APP_ERROR_FIND_MEMORY_TYPE };
 }
 
-static int create_color_resources(HelloTriangleApp *app) {
+static int create_color_resources(VulkanApp *app) {
     VkImageCreateInfo image_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
@@ -1409,7 +1413,7 @@ static int create_color_resources(HelloTriangleApp *app) {
         .format = app->swapchain_image_format,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        .usage = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
         .samples = app->msaa_samples,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -1422,7 +1426,7 @@ static int create_color_resources(HelloTriangleApp *app) {
         &app->color_image
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_COLOR_RESOURCES_CREATE;
+        return APP_ERROR_CREATE_COLOR_RESOURCES_CREATE;
     }
 
     VkMemoryRequirements mem_requirements;
@@ -1459,7 +1463,7 @@ static int create_color_resources(HelloTriangleApp *app) {
         &app->color_image_memory
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_COLOR_RESOURCES_ALLOC;
+        return APP_ERROR_CREATE_COLOR_RESOURCES_ALLOC;
     }
 
     vkBindImageMemory(
@@ -1490,14 +1494,14 @@ static int create_color_resources(HelloTriangleApp *app) {
         &app->color_image_view
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_IMAGE_VIEWS_CREATE;
+        return APP_ERROR_CREATE_IMAGE_VIEWS_CREATE;
     }
 
     return 0;
 }
 
 static int create_buffer(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     VkDeviceSize size,
     VkBufferUsageFlags usage,
     VkMemoryPropertyFlags properties,
@@ -1518,7 +1522,7 @@ static int create_buffer(
         buffer
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_BUFFER_CREATE;
+        return APP_ERROR_CREATE_BUFFER_CREATE;
     }
 
     VkMemoryRequirements mem_requirements;
@@ -1555,7 +1559,7 @@ static int create_buffer(
         buffer_memory
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_BUFFER_MEMORY;
+        return APP_ERROR_CREATE_BUFFER_MEMORY;
     }
 
     vkBindBufferMemory(
@@ -1569,7 +1573,7 @@ static int create_buffer(
 }
 
 static int copy_buffer(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     VkBuffer dst_buffer,
     VkBuffer src_buffer,
     VkDeviceSize size
@@ -1588,7 +1592,7 @@ static int copy_buffer(
         &command_buffer
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_COPY_BUFFER_ALLOCATE;
+        return APP_ERROR_COPY_BUFFER_ALLOCATE;
     }
 
     VkCommandBufferBeginInfo begin_info = {
@@ -1606,7 +1610,7 @@ static int copy_buffer(
 
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
-        return HT_ERROR_COPY_BUFFER_COMMAND;
+        return APP_ERROR_COPY_BUFFER_COMMAND;
     }
 
     VkSubmitInfo submit_info = {
@@ -1621,7 +1625,7 @@ static int copy_buffer(
         VK_NULL_HANDLE
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_COPY_BUFFER_SUBMIT;
+        return APP_ERROR_COPY_BUFFER_SUBMIT;
     }
 
     vkQueueWaitIdle(app->graphics_queue);
@@ -1631,7 +1635,7 @@ static int copy_buffer(
     return 0;
 }
 
-static int create_vertex_buffer(HelloTriangleApp *app) {
+static int create_vertex_buffer(VulkanApp *app) {
     VkBuffer staging_buffer;
     VkDeviceMemory staging_buffer_memory;
 
@@ -1688,7 +1692,7 @@ static int create_vertex_buffer(HelloTriangleApp *app) {
     return 0;
 }
 
-static int create_index_buffer(HelloTriangleApp *app) {
+static int create_index_buffer(VulkanApp *app) {
     VkBuffer staging_buffer;
     VkDeviceMemory staging_buffer_memory;
 
@@ -1748,7 +1752,7 @@ static int create_index_buffer(HelloTriangleApp *app) {
     return 0;
 }
 
-static int create_command_buffers(HelloTriangleApp *app) {
+static int create_command_buffers(VulkanApp *app) {
     VkCommandBufferAllocateInfo alloc_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = app->command_pool,
@@ -1762,13 +1766,13 @@ static int create_command_buffers(HelloTriangleApp *app) {
         app->command_buffers
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_COMMAND_BUFFER;
+        return APP_ERROR_CREATE_COMMAND_BUFFER;
     }
 
     return 0;
 }
 
-static int create_sync_objects(HelloTriangleApp *app) {
+static int create_sync_objects(VulkanApp *app) {
     VkSemaphoreCreateInfo semaphore_info = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
@@ -1786,7 +1790,7 @@ static int create_sync_objects(HelloTriangleApp *app) {
             &app->image_available_semaphores[i]
         );
         if (result != VK_SUCCESS) {
-            return HT_ERROR_CREATE_SYNC_OBJECTS_AVAILABLE;
+            return APP_ERROR_CREATE_SYNC_OBJECTS_AVAILABLE;
         }
         
         result = vkCreateSemaphore(
@@ -1796,7 +1800,7 @@ static int create_sync_objects(HelloTriangleApp *app) {
             &app->render_finished_semaphores[i]
         );
         if (result != VK_SUCCESS) {
-            return HT_ERROR_CREATE_SYNC_OBJECTS_FINISHED;
+            return APP_ERROR_CREATE_SYNC_OBJECTS_FINISHED;
         }
 
         result = vkCreateFence(
@@ -1806,14 +1810,14 @@ static int create_sync_objects(HelloTriangleApp *app) {
             &app->in_flight_fences[i]
         );
         if (result != VK_SUCCESS) {
-            return HT_ERROR_CREATE_SYNC_OBJECTS_FENCE;
+            return APP_ERROR_CREATE_SYNC_OBJECTS_FENCE;
         }
     }
 
     return 0;
 }
 
-static int create_uniform_buffers(HelloTriangleApp *app) {
+static int create_uniform_buffers(VulkanApp *app) {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         int error = create_buffer(
             app,
@@ -1841,7 +1845,7 @@ static int create_uniform_buffers(HelloTriangleApp *app) {
     return 0;
 }
 
-static int create_descriptor_pool(HelloTriangleApp *app) {
+static int create_descriptor_pool(VulkanApp *app) {
     VkDescriptorPoolSize pool_size = {
         .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = MAX_FRAMES_IN_FLIGHT,
@@ -1860,13 +1864,13 @@ static int create_descriptor_pool(HelloTriangleApp *app) {
         &app->descriptor_pool
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_DESCRIPTOR_POOL;
+        return APP_ERROR_CREATE_DESCRIPTOR_POOL;
     }
 
     return 0;
 }
 
-static int create_descriptor_sets(HelloTriangleApp *app) {
+static int create_descriptor_sets(VulkanApp *app) {
     VkDescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT];
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         layouts[i] = app->descriptor_set_layout;
@@ -1885,7 +1889,7 @@ static int create_descriptor_sets(HelloTriangleApp *app) {
         app->descriptor_sets
     );
     if (result != VK_SUCCESS) {
-        return HT_ERROR_CREATE_DESCRIPTOR_SETS;
+        return APP_ERROR_CREATE_DESCRIPTOR_SETS;
     }
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -1912,7 +1916,7 @@ static int create_descriptor_sets(HelloTriangleApp *app) {
 }
 
 static int record_command_buffer(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     VkCommandBuffer command_buffer,
     uint32_t image_index
 ) {
@@ -1924,7 +1928,7 @@ static int record_command_buffer(
     
     VkResult result = vkBeginCommandBuffer(command_buffer, &begin_info);
     if (result != VK_SUCCESS) {
-        return HT_ERROR_RECORD_COMMAND_BUFFER_BEGIN;
+        return APP_ERROR_RECORD_COMMAND_BUFFER_BEGIN;
     }
 
     {
@@ -1934,13 +1938,13 @@ static int record_command_buffer(
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .image = app->color_image,
+                .image = slice_get(app->swapchain_images, image_index),
                 .subresourceRange = {
-                  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                  .baseMipLevel = 0,
-                  .levelCount = 1,
-                  .baseArrayLayer = 0,
-                  .layerCount = 1,
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
                 },
             }
         };
@@ -1965,13 +1969,21 @@ static int record_command_buffer(
         },
     };
 
-    VkRenderingAttachmentInfoKHR color_attachment_info = {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = app->color_image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = clear_color,
+    VkRenderingAttachmentInfoKHR attachments[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView = app->color_image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT,
+            .resolveImageView = slice_get(
+                app->swapchain_image_views,
+                image_index
+            ),
+            .resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue = clear_color,
+        },
     };
 
     VkRenderingInfoKHR render_info = {
@@ -1981,8 +1993,8 @@ static int record_command_buffer(
             .extent = app->swapchain_extent,
         },
         .layerCount = 1,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_attachment_info,
+        .colorAttachmentCount = countof(attachments),
+        .pColorAttachments = attachments,
     };
 
     vkCmdBeginRenderingKHR(command_buffer, &render_info);
@@ -2048,83 +2060,7 @@ static int record_command_buffer(
             {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .image = slice_get(app->swapchain_images, image_index),
-                .subresourceRange = {
-                  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                  .baseMipLevel = 0,
-                  .levelCount = 1,
-                  .baseArrayLayer = 0,
-                  .layerCount = 1,
-                },
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .image = app->color_image,
-                .subresourceRange = {
-                  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                  .baseMipLevel = 0,
-                  .levelCount = 1,
-                  .baseArrayLayer = 0,
-                  .layerCount = 1,
-                },
-            }
-        };
-
-        vkCmdPipelineBarrier(
-            command_buffer,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            0,
-            0,
-            NULL,
-            0,
-            NULL,
-            countof(image_memory_barriers),
-            image_memory_barriers
-        );
-    }
-
-    VkImageResolve image_resolve = {
-        .srcSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-        .dstSubresource = {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-        .extent = {
-            .width = app->swapchain_extent.width,
-            .height = app->swapchain_extent.height,
-            .depth = 1,
-        },
-    };
-
-    vkCmdResolveImage(
-        command_buffer,
-        app->color_image,
-        VK_IMAGE_LAYOUT_GENERAL,
-        slice_get(app->swapchain_images, image_index),
-        VK_IMAGE_LAYOUT_GENERAL,
-        1,
-        &image_resolve
-    );
-
-    {
-        VkImageMemoryBarrier image_memory_barriers[] = {
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                 .image = slice_get(app->swapchain_images, image_index),
                 .subresourceRange = {
@@ -2151,43 +2087,15 @@ static int record_command_buffer(
         );
     }
  
-    //VkImageMemoryBarrier image_memory_barrier_present = {
-    //    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-    //    .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    //    .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    //    .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    //    .image = slice_get(app->swapchain_images, image_index),
-    //    .subresourceRange = {
-    //        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-    //        .baseMipLevel = 0,
-    //        .levelCount = 1,
-    //        .baseArrayLayer = 0,
-    //        .layerCount = 1,
-    //    },
-    //};
-
-    //vkCmdPipelineBarrier(
-    //    command_buffer,
-    //    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-    //    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-    //    0,
-    //    0,
-    //    NULL,
-    //    0,
-    //    NULL,
-    //    1,
-    //    &image_memory_barrier_present
-    //);
-
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
-        return HT_ERROR_RECORD_COMMAND_BUFFER_END;
+        return APP_ERROR_RECORD_COMMAND_BUFFER_END;
     }
 
     return 0;
 }
 
-static void cleanup_swapchain(HelloTriangleApp *app) {
+static void cleanup_swapchain(VulkanApp *app) {
     vkDestroyImageView(app->device, app->color_image_view, NULL);
     vkDestroyImage(app->device, app->color_image, NULL);
     vkFreeMemory(app->device, app->color_image_memory, NULL);
@@ -2204,7 +2112,7 @@ static void cleanup_swapchain(HelloTriangleApp *app) {
 }
 
 static void update_uniform_buffer(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     uint32_t current_image
 ) {
     float width = (float)app->swapchain_extent.width;
@@ -2229,7 +2137,7 @@ static void update_uniform_buffer(
 }
 
 static int recreate_swapchain(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
@@ -2271,13 +2179,13 @@ static int recreate_swapchain(
 }
 
 static int init_vulkan(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
     VkResult result = volkInitialize();
     if (result != VK_SUCCESS) {
-        return HT_ERROR_INIT_VULKAN_VOLK;
+        return APP_ERROR_INIT_VULKAN_VOLK;
     }
 
     int error = create_instance(app, temp_arena);
@@ -2376,7 +2284,7 @@ static int init_vulkan(
 }
 
 static int draw_frame(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
@@ -2400,7 +2308,7 @@ static int draw_frame(
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         return recreate_swapchain(app, swapchain_arena, temp_arena);
     } else if (result != VK_SUCCESS and result != VK_SUBOPTIMAL_KHR) {
-        return HT_ERROR_DRAW_FRAME_SWAPCHAIN;
+        return APP_ERROR_DRAW_FRAME_SWAPCHAIN;
     }
 
     update_uniform_buffer(app, app->current_frame);
@@ -2447,7 +2355,7 @@ static int draw_frame(
         app->in_flight_fences[app->current_frame]
     );
     if (result != VK_SUCCESS) {
-        return HT_ERRROR_DRAW_FRAME_SUBMIT;
+        return APP_ERROR_DRAW_FRAME_SUBMIT;
     }
 
     VkSwapchainKHR swapchain = app->swapchain;
@@ -2473,14 +2381,14 @@ static int draw_frame(
         app->framebuffer_resized = false;
         return recreate_swapchain(app, swapchain_arena, temp_arena);
     } else if (result != VK_SUCCESS) {
-        return HT_ERROR_DRAW_FRAME_SWAPCHAIN;
+        return APP_ERROR_DRAW_FRAME_SWAPCHAIN;
     }
  
     return 0;
 }
 
 static int main_loop(
-    HelloTriangleApp *app,
+    VulkanApp *app,
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
@@ -2488,13 +2396,15 @@ static int main_loop(
         glfwPollEvents();
         draw_frame(app, swapchain_arena, temp_arena);
 
-        time_t current_time = time(NULL);
-        if (current_time == (time_t)(-1)) {
-            return HT_ERROR_MAIN_LOOP_TIME;
+        TimeSpec current_time;
+        int result = timespec_now(&current_time);
+        if (result != 0) {
+            return APP_ERROR_MAIN_LOOP_TIME;
         }
 
-        if (difftime(current_time, app->last_update) >= 1.0) {
-            app->rotation_angle += 3.1415f / 75.0f;
+        int64_t delta_time = timespec_diff(&current_time, &app->last_update);
+        if (delta_time >= 1000L * 1000L * 8L) {
+            app->rotation_angle += 3.1415f / 600.0f;
             app->last_update = current_time;
         }
     }
@@ -2504,7 +2414,7 @@ static int main_loop(
     return 0;
 }
 
-static void cleanup(HelloTriangleApp *app) {
+static void cleanup(VulkanApp *app) {
     cleanup_swapchain(app);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -2559,7 +2469,7 @@ static void cleanup(HelloTriangleApp *app) {
     glfwTerminate();
 }
 
-static int run(HelloTriangleApp *app, Arena temp_arena) {
+static int run(VulkanApp *app, Arena temp_arena) {
     Arena swapchain_arena = arena_init(
         arena_alloc(&temp_arena, ARENA_SIZE, 1),
         ARENA_SIZE
@@ -2594,10 +2504,10 @@ int main(void) {
         2 * ARENA_SIZE
     );
     if (arena.base == NULL) {
-        return HT_ERROR_MAIN_MALLOC;
+        return APP_ERROR_MAIN_MALLOC;
     }
 
-    HelloTriangleApp app = {
+    VulkanApp app = {
         .width = 480,
         .height = 480,
     };

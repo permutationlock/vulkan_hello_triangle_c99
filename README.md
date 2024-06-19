@@ -42,7 +42,7 @@ By default `make` will build with [gcc][7] and compile shaders with
 
 ```
 make
-./hello_triangle
+./vulkan_app
 ```
 
 If you have another compiler, then you can modify the appropriate
@@ -50,15 +50,16 @@ environment variables to e.g. use [clang][20].
 
 ```
 make CC="clang"
-./hello_triangle
+./vulkan_app
 ```
 
 The project will even build with the awesome and simple [cproc][1]
 compiler[^1].
 
 ```
-make CC="cproc" CFLAGS="-std=c99" GLFW_FLAGS="-std=c99"
-./hello_triangle
+make CC="cproc" CFLAGS="-D\"__attribute(x)=\" -D\"__attribute__(x)=\"" \
+    GLFW_FLAGS="-D\"__attribute(x)=\" -D\"__attribute__(x)=\""
+./vulkan_app
 ```
 
 You can easily cross-compile a Windows application from Linux with the
@@ -83,16 +84,16 @@ On a Windows machine you can compile and run a Windows application with
 Mingw-w64.
 
 ```
-make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c99 -O2" LDFLAGS="-mwindows"
-./hello_triangle.exe
+make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c11 -O2" LDFLAGS="-mwindows"
+./vulkan_app.exe
 ```
 
 Or build and run a Windows app with Zig.
 
 ```
 make CC="zig cc" LDLFAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
-mv hello_triangle hello_triangle.exe
-./hello_triangle.exe
+mv vulkan_app vulkan_app.exe
+./vulkan_app.exe
 ```
 
 You can also cross-compile a Linux application from Windows.

@@ -1,6 +1,8 @@
 #ifndef AVEN_GLM_H
 #define AVEN_GLM_H
 
+#include "aven.h"
+
 typedef struct { float data[2]; } Vec2;
 typedef struct { float data[3]; } Vec3;
 typedef struct { float data[4]; } Vec4;
@@ -17,5 +19,21 @@ typedef struct { Vec3 data[4]; } Mat3x4;
 
 typedef struct { Vec4 data[2]; } Mat4x2;
 typedef struct { Vec4 data[3]; } Mat4x3;
+
+#define vec_get(v, i) m.data[i]
+#define mat_get(m, i, j) m.data[i].data[j]
+
+static Mat2 mat2_mul_mat2(Mat2 a, Mat2 b) {
+    Mat2 dest;
+    mat_get(dest, 0, 0) = mat_get(a, 0, 0) * mat_get(b, 0, 0) +
+        mat_get(a, 1, 0) * mat_get(b, 0, 1);
+    mat_get(dest, 0, 1) = mat_get(a, 0, 1) * mat_get(b, 0, 0) +
+        mat_get(a, 1, 1) * mat_get(b, 0, 1);
+    mat_get(dest, 1, 0) = mat_get(a, 0, 0) * mat_get(b, 1, 0) +
+        mat_get(a, 0, 1) * mat_get(b, 1, 1);
+    mat_get(dest, 1, 1) = mat_get(a, 0, 1) * mat_get(b, 1, 0) +
+        mat_get(a, 1 , 1) * mat_get(b, 1, 1);
+    return dest;
+}
 
 #endif // AVEN_GLM_H

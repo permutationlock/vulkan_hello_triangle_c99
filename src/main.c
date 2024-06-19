@@ -1,6 +1,8 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define VOLK_IMPLEMENTATION
 #include <volk.h>
@@ -98,6 +100,10 @@ typedef struct {
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
 
+    VkImage color_image;
+    VkDeviceMemory color_image_memory;
+    VkImageView color_image_view;
+
     VkDescriptorSetLayout descriptor_set_layout;
     VkPipelineLayout pipeline_layout;
     VkPipeline graphics_pipeline;
@@ -121,9 +127,14 @@ typedef struct {
     VkSemaphore render_finished_semaphores[MAX_FRAMES_IN_FLIGHT];
     VkFence in_flight_fences[MAX_FRAMES_IN_FLIGHT];
 
+    VkSampleCountFlagBits msaa_samples;
+
     Arena base_swapchain_arena;
     uint32_t current_frame;
     bool framebuffer_resized;
+
+    time_t last_update;
+    float rotation_angle;
 } HelloTriangleApp;
 
 typedef enum {
@@ -174,6 +185,9 @@ typedef enum {
     HT_ERROR_CREATE_DESCRIPTOR_SET_LAYOUT,
     HT_ERROR_CREATE_DESCRIPTOR_POOL,
     HT_ERROR_CREATE_DESCRIPTOR_SETS,
+    HT_ERROR_CREATE_COLOR_RESOURCES_CREATE,
+    HT_ERROR_CREATE_COLOR_RESOURCES_ALLOC,
+    HT_ERROR_MAIN_LOOP_TIME,
 #ifdef ENABLE_VALIDATION_LAYERS
     HT_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
     HT_ERROR_SETUP_DEBUG_MESSENGER,
@@ -629,6 +643,27 @@ static BoolResult is_device_suitable(
     return (BoolResult){ .payload = true };
 }
 
+static VkSampleCountFlagBits get_max_sample_count(HelloTriangleApp *app) {
+    VkPhysicalDeviceProperties physical_device_properties;
+    vkGetPhysicalDeviceProperties(
+        app->physical_device,
+        &physical_device_properties
+    );
+
+    VkSampleCountFlags counts =
+        physical_device_properties.limits.framebufferColorSampleCounts &
+        physical_device_properties.limits.framebufferDepthSampleCounts;
+
+    if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
+    if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
+    if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
+    if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+    if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
+    if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+
+    return VK_SAMPLE_COUNT_1_BIT;
+}
+
 static int pick_physical_device(HelloTriangleApp *app, Arena temp_arena) {
     uint32_t device_count = 0;
     vkEnumeratePhysicalDevices(app->instance, &device_count, NULL);
@@ -655,6 +690,7 @@ static int pick_physical_device(HelloTriangleApp *app, Arena temp_arena) {
 
         if (result.payload) {
             app->physical_device = devices[i];
+            app->msaa_samples = get_max_sample_count(app);
             break;
         }
     }
@@ -865,7 +901,8 @@ static int create_swapchain(
         .imageColorSpace = surface_format.colorSpace,
         .imageExtent = extent,
         .imageArrayLayers = 1,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         .preTransform = swapchain_support.capabilities.currentTransform,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = present_mode,
@@ -1211,11 +1248,7 @@ static int create_graphics_pipeline(HelloTriangleApp *app, Arena temp_arena) {
     VkPipelineMultisampleStateCreateInfo multisampling = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .sampleShadingEnable = VK_FALSE,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        .minSampleShading = 1.0f,
-        .pSampleMask = NULL,
-        .alphaToCoverageEnable = VK_FALSE,
-        .alphaToOneEnable = VK_FALSE,
+        .rasterizationSamples = app->msaa_samples,
     };
 
     VkPipelineColorBlendAttachmentState color_blend_attachment = {
@@ -1362,6 +1395,105 @@ static MemoryTypeIndexResult find_memory_type(
     }
 
     return (MemoryTypeIndexResult){ .error = HT_ERROR_FIND_MEMORY_TYPE };
+}
+
+static int create_color_resources(HelloTriangleApp *app) {
+    VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .extent.width = app->swapchain_extent.width,
+        .extent.height = app->swapchain_extent.height,
+        .extent.depth = 1,
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .format = app->swapchain_image_format,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .samples = app->msaa_samples,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+
+    VkResult result = vkCreateImage(
+        app->device,
+        &image_info,
+        NULL,
+        &app->color_image
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_CREATE_COLOR_RESOURCES_CREATE;
+    }
+
+    VkMemoryRequirements mem_requirements;
+    vkGetImageMemoryRequirements(
+        app->device,
+        app->color_image,
+        &mem_requirements
+    );
+
+    uint32_t memory_type_index;
+    {
+        MemoryTypeIndexResult memory_type_index_result = find_memory_type(
+            app,
+            mem_requirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+        );
+        if (memory_type_index_result.error != 0) {
+            return memory_type_index_result.error;
+        }
+
+        memory_type_index = memory_type_index_result.payload;
+    }
+
+    VkMemoryAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = mem_requirements.size,
+        .memoryTypeIndex = memory_type_index,
+    };
+
+    result = vkAllocateMemory(
+        app->device,
+        &alloc_info,
+        NULL,
+        &app->color_image_memory
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_CREATE_COLOR_RESOURCES_ALLOC;
+    }
+
+    vkBindImageMemory(
+        app->device,
+        app->color_image,
+        app->color_image_memory,
+        0
+    );
+
+    VkImageViewCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = app->color_image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = app->swapchain_image_format,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+
+    result = vkCreateImageView(
+        app->device,
+        &create_info,
+        NULL,
+        &app->color_image_view
+    );
+    if (result != VK_SUCCESS) {
+        return HT_ERROR_CREATE_IMAGE_VIEWS_CREATE;
+    }
+
+    return 0;
 }
 
 static int create_buffer(
@@ -1795,33 +1927,37 @@ static int record_command_buffer(
         return HT_ERROR_RECORD_COMMAND_BUFFER_BEGIN;
     }
 
-    VkImageMemoryBarrier image_memory_barrier_optimal = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .image = slice_get(app->swapchain_images, image_index),
-        .subresourceRange = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .baseMipLevel = 0,
-          .levelCount = 1,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-        },
-    };
+    {
+        VkImageMemoryBarrier image_memory_barriers[] = {
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .image = app->color_image,
+                .subresourceRange = {
+                  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                  .baseMipLevel = 0,
+                  .levelCount = 1,
+                  .baseArrayLayer = 0,
+                  .layerCount = 1,
+                },
+            }
+        };
 
-    vkCmdPipelineBarrier(
-        command_buffer,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        0,
-        0,
-        NULL,
-        0,
-        NULL,
-        1,
-        &image_memory_barrier_optimal
-    );
+        vkCmdPipelineBarrier(
+            command_buffer,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0,
+            0,
+            NULL,
+            0,
+            NULL,
+            countof(image_memory_barriers),
+            image_memory_barriers
+        );
+    }
 
     VkClearValue clear_color = {
         .color = {
@@ -1831,7 +1967,7 @@ static int record_command_buffer(
 
     VkRenderingAttachmentInfoKHR color_attachment_info = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-        .imageView = slice_get(app->swapchain_image_views, image_index),
+        .imageView = app->color_image_view,
         .imageLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1906,34 +2042,142 @@ static int record_command_buffer(
     vkCmdDrawIndexed(command_buffer, countof(INDICES), 1, 0, 0, 0);
 
     vkCmdEndRendering(command_buffer);
- 
-    VkImageMemoryBarrier image_memory_barrier_present = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .image = slice_get(app->swapchain_images, image_index),
-        .subresourceRange = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .baseMipLevel = 0,
-          .levelCount = 1,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
+
+    {
+        VkImageMemoryBarrier image_memory_barriers[] = {
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .image = slice_get(app->swapchain_images, image_index),
+                .subresourceRange = {
+                  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                  .baseMipLevel = 0,
+                  .levelCount = 1,
+                  .baseArrayLayer = 0,
+                  .layerCount = 1,
+                },
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .image = app->color_image,
+                .subresourceRange = {
+                  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                  .baseMipLevel = 0,
+                  .levelCount = 1,
+                  .baseArrayLayer = 0,
+                  .layerCount = 1,
+                },
+            }
+        };
+
+        vkCmdPipelineBarrier(
+            command_buffer,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0,
+            0,
+            NULL,
+            0,
+            NULL,
+            countof(image_memory_barriers),
+            image_memory_barriers
+        );
+    }
+
+    VkImageResolve image_resolve = {
+        .srcSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .dstSubresource = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .extent = {
+            .width = app->swapchain_extent.width,
+            .height = app->swapchain_extent.height,
+            .depth = 1,
         },
     };
 
-    vkCmdPipelineBarrier(
+    vkCmdResolveImage(
         command_buffer,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        0,
-        0,
-        NULL,
-        0,
-        NULL,
+        app->color_image,
+        VK_IMAGE_LAYOUT_GENERAL,
+        slice_get(app->swapchain_images, image_index),
+        VK_IMAGE_LAYOUT_GENERAL,
         1,
-        &image_memory_barrier_present
+        &image_resolve
     );
+
+    {
+        VkImageMemoryBarrier image_memory_barriers[] = {
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+                .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                .image = slice_get(app->swapchain_images, image_index),
+                .subresourceRange = {
+                  .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                  .baseMipLevel = 0,
+                  .levelCount = 1,
+                  .baseArrayLayer = 0,
+                  .layerCount = 1,
+                },
+            }
+        };
+
+        vkCmdPipelineBarrier(
+            command_buffer,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            0,
+            0,
+            NULL,
+            0,
+            NULL,
+            countof(image_memory_barriers),
+            image_memory_barriers
+        );
+    }
+ 
+    //VkImageMemoryBarrier image_memory_barrier_present = {
+    //    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+    //    .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    //    .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    //    .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    //    .image = slice_get(app->swapchain_images, image_index),
+    //    .subresourceRange = {
+    //        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+    //        .baseMipLevel = 0,
+    //        .levelCount = 1,
+    //        .baseArrayLayer = 0,
+    //        .layerCount = 1,
+    //    },
+    //};
+
+    //vkCmdPipelineBarrier(
+    //    command_buffer,
+    //    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+    //    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+    //    0,
+    //    0,
+    //    NULL,
+    //    0,
+    //    NULL,
+    //    1,
+    //    &image_memory_barrier_present
+    //);
 
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
@@ -1944,6 +2188,10 @@ static int record_command_buffer(
 }
 
 static void cleanup_swapchain(HelloTriangleApp *app) {
+    vkDestroyImageView(app->device, app->color_image_view, NULL);
+    vkDestroyImage(app->device, app->color_image, NULL);
+    vkFreeMemory(app->device, app->color_image_memory, NULL);
+
     for (size_t i = 0; i < app->swapchain_image_views.len; ++i) {
         vkDestroyImageView(
             app->device,
@@ -1962,12 +2210,21 @@ static void update_uniform_buffer(
     float width = (float)app->swapchain_extent.width;
     float height = (float)app->swapchain_extent.height;
     float side = min(width, height);
-    UniformBufferObject ubo = {
-        .view = {
-            { { { side / width, 0.0f } }, { { 0.0f, side / height } } }
-        },
-    };
+    Mat2 view_matrix = { {
+        { { side / width, 0.0f } },
+        { { 0.0f, side / height } }
+    } };
 
+    float sin_rangle = sinf(app->rotation_angle);
+    float cos_rangle = cosf(app->rotation_angle);
+    Mat2 rotation_matrix = { {
+        { { cos_rangle, -sin_rangle } },
+        { { sin_rangle, cos_rangle } }
+    } };
+
+    UniformBufferObject ubo = {
+        .view = mat2_mul_mat2(view_matrix, rotation_matrix),
+    };
     memcpy(app->uniform_buffers_mapped[current_image], &ubo, sizeof(ubo));
 }
 
@@ -2001,6 +2258,11 @@ static int recreate_swapchain(
     }
 
     error = create_image_views(app, swapchain_arena);
+    if (error != 0) {
+        return error;
+    }
+
+    error = create_color_resources(app);
     if (error != 0) {
         return error;
     }
@@ -2066,6 +2328,11 @@ static int init_vulkan(
     }
 
     error = create_command_pool(app, temp_arena);
+    if (error != 0) {
+        return error;
+    }
+
+    error = create_color_resources(app);
     if (error != 0) {
         return error;
     }
@@ -2220,6 +2487,16 @@ static int main_loop(
     while (!glfwWindowShouldClose(app->window)) {
         glfwPollEvents();
         draw_frame(app, swapchain_arena, temp_arena);
+
+        time_t current_time = time(NULL);
+        if (current_time == (time_t)(-1)) {
+            return HT_ERROR_MAIN_LOOP_TIME;
+        }
+
+        if (difftime(current_time, app->last_update) >= 1.0) {
+            app->rotation_angle += 3.1415f / 75.0f;
+            app->last_update = current_time;
+        }
     }
 
     vkDeviceWaitIdle(app->device);
@@ -2323,7 +2600,6 @@ int main(void) {
     HelloTriangleApp app = {
         .width = 480,
         .height = 480,
-        .physical_device = VK_NULL_HANDLE,
     };
 
     int error = run(&app, arena);

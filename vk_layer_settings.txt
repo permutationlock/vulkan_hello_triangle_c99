@@ -1,0 +1,2 @@
+khronos_validation.printf_to_stdout = true
+khronos_validation.validate_gpu_based = GPU_BASED_DEBUG_PRINTF

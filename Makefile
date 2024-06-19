@@ -15,7 +15,7 @@ INCLUDEFLAGS = -Ideps/glfw/include -Ideps/volk/include -Ideps/vulkan/include \
 	-Ideps/wayland/include -Ideps/xkbcommon/include
 LDFLAGS = -lm -ldl -lpthread
 
-.PHONY: all shaders clean cleanobj cleanshaders run
+.PHONY: all shaders clean cleanobj cleanshaders
 all: vulkan_app shaders
 clean: cleanobjects cleanshaders
 
@@ -37,7 +37,3 @@ shaders/frag.spv: shaders/base.frag
 	$(SHADERC) $(SHADERFLAGS) -o $@ $<
 cleanshaders:
 	rm -f shaders/vert.spv shaders/frag.spv
-
-run: vulkan_app shaders
-	VK_LAYER_ENABLES="VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT" \
-		VK_KHRONOS_VALIDATION_PRINTF_TO_STDOUT=1 ./vulkan_app

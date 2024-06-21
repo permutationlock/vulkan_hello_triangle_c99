@@ -53,7 +53,7 @@ typedef struct {
             return a;
         }
 
-        #define slice_get(s, i) (s.ptr[aven_assert_smaller_internal(i, s.len)])
+        #define slice_get(s, i) s.ptr[aven_assert_smaller_internal(i, s.len)]
         #define slice_copy(d, s) memcpy( \
                 d.ptr, \
                 s.ptr, \
@@ -63,7 +63,7 @@ typedef struct {
                 ) \
             )
     #else
-        #define slice_get(s, i) (s.ptr[i])
+        #define slice_get(s, i) s.ptr[i]
         #define slice_copy(d, s) memcpy(d.ptr, s.ptr, sizeof(*s.ptr) * s.len)
     #endif
 

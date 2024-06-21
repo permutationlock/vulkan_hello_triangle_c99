@@ -1,13 +1,15 @@
-# A Vulkan Triangle in C99 (or later)
+# A basic Vulkan application in C99 (or later)
 
-An implementation of the basic triangle drawing example from
-the [Vulkan Tutorial][10] with some changes:
+A C implementation of a simple rotating anti-aliased square based on
+the [Vulkan Tutorial][10]. There are a few significant changes from the
+tutorial:
 
- - Vulkan 1.3 direct rendering is used in lieu of render passes;
+ - Vulkan 1.3 direct rendering is used in lieu of render pass objects;
  - the [volk][11] dynamic loader is used in lieu of directly linking
    the `libvulkan.so` shared library.
 
-The project design was inpsired by [Chris Wellons' blog][18] and [raylib][19].
+The coding style and project organization was inpsired by [Zig][21],
+[Chris Wellons' blog][18], and [raylib][19].
 
 ## Requirements
 
@@ -15,7 +17,7 @@ To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
 The project supports Linux [Wayland][13] targets and Windows targets.
 There are **ZERO** build dependencies beyond the `libc` required
-by your target (e.g. `glibc` or `musl` for Linux, or `mingw` for Windows).
+by your target.
 
 The project vendors and builds [GLFW][2] and [volk][11]. Also included
 are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
@@ -23,10 +25,10 @@ are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
 
 To run the application you will need the [Vulkan loader][4]
 and a Vulkan driver for your graphics card. To run executables built with
-`ENABLE_VALIDATION_LAYERS` defined (which it is in the default `CFLAGS`)
+`ENABLE_VALIDATION_LAYERS` defined (which is the case in the default `CFLAGS`)
 you will need to have the [Vulkan validation layers][12] installed as well.
 
-To run on Linux you will need a Wayland compositor, the Wayland shared
+To run on Linux you will also need a Wayland compositor, the Wayland shared
 libraries, and the [xkbcommon][17] shared library.
 Note that installing virtually any Wayland compositor capable of Vulkan
 support will also install these libraries by default.
@@ -41,7 +43,7 @@ By default `make` will build with [gcc][7] and compile shaders with
 [glslc][8].
 
 ```
-make
+make -j5
 ./vulkan_app
 ```
 
@@ -49,7 +51,7 @@ If you have another compiler, then you can modify the appropriate
 environment variables to e.g. use [clang][20].
 
 ```
-make CC="clang"
+make CC="clang" -j5
 ./vulkan_app
 ```
 
@@ -57,8 +59,8 @@ The project will even build with the awesome and simple [cproc][1]
 compiler[^1].
 
 ```
-make CC="cproc" CFLAGS="-D\"__attribute(x)=\" -D\"__attribute__(x)=\"" \
-    GLFW_FLAGS="-D\"__attribute(x)=\" -D\"__attribute__(x)=\""
+make CC="cproc" CFLAGS="-D\"__attribute__(x)=\"" \
+    GLFW_FLAGS="-D\"__attribute__(x)=\"" -j5
 ./vulkan_app
 ```
 
@@ -67,11 +69,12 @@ You can easily cross-compile a Windows application from Linux with the
 
 ```
 make CC="x86_64-w64-mingw32-gcc" CFLAGS="-std=c99 -O2" LDFLAGS="-mwindows" \
-    GLFW_CFLAGS="-std=c99 -O2"
+    GLFW_CFLAGS="-std=c99 -O2 -DNDEBUG" \
+    SHADERFLAGS="--target-env=vulkan1.3 -O" -j5
 ```
 
-You can also cross-compile a Windows application with [zig cc][18] (or any
-clang toolchain set up with a Windows target).
+You can also cross-compile a Windows application with [zig cc][21] (or any
+clang toolchain with a Windows Mingw target).
 
 ```
 make CC="zig cc -target x86_64-windows-gnu" \
@@ -84,7 +87,8 @@ On a Windows machine you can compile and run a Windows application with
 Mingw-w64.
 
 ```
-make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c11 -O2" LDFLAGS="-mwindows"
+make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c99 -O2 -DNDEBUG" \
+    LDFLAGS="-mwindows" SHADERFLAGS="--target-env=vulkan1.3 -O" -j5
 ./vulkan_app.exe
 ```
 
@@ -100,7 +104,8 @@ You can also cross-compile a Linux application from Windows.
 
 ```
 make CC="zig cc -target x86_64-linux-gnu" CFLAGS="-std=c99 -O2" \
-    GLFW_CFLAGS="-std=c99 -O2"
+    GLFW_CFLAGS="-std=c99 -O2 -DNDEBUG" \
+    SHADERFLAGS="--target-env=vulkan1.3 -O" -j5
 ```
 
 [^1]: A [small patch][15] to [QBE][16] is required to increase the maximum
@@ -126,3 +131,4 @@ make CC="zig cc -target x86_64-linux-gnu" CFLAGS="-std=c99 -O2" \
 [18]: https://nullprogram.com
 [19]: https://github.com/raysan5/raylib
 [20]: https://clang.llvm.org/
+[21]: https://ziglang.org/

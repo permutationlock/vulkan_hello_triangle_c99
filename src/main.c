@@ -16,7 +16,7 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#define ARENA_SIZE 1024 * 1024
+#define ARENA_SIZE 1024 * 1024 * 8
 #define MAX_FRAMES_IN_FLIGHT 2
 
 #ifdef ENABLE_VALIDATION_LAYERS
@@ -811,7 +811,7 @@ static VkPresentModeKHR choose_swap_present_mode(
 ) {
     for (size_t i = 0; i < available_present_modes.len; ++i) {
         VkPresentModeKHR present_mode = slice_get(available_present_modes, i);
-        if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+        if (present_mode == VK_PRESENT_MODE_FIFO_KHR) {
             return present_mode;
         }
     }
@@ -2403,8 +2403,9 @@ static int main_loop(
         }
 
         int64_t delta_time = timespec_diff(&current_time, &app->last_update);
-        if (delta_time >= 1000L * 1000L * 8L) {
-            app->rotation_angle += 3.1415f / 600.0f;
+        if (delta_time >= 1000L) {
+            float fdt = (float)delta_time / (1000.0f * 1000.0f * 1000.0f);
+            app->rotation_angle += fdt * 3.1415f / 5.0f;
             app->last_update = current_time;
         }
     }

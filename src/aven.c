@@ -3,10 +3,18 @@
 #include "aven.h"
 
 void *arena_alloc(Arena *arena, size_t size, size_t align) {
-    unsigned char *p = (void *)((size_t)(arena->top - size) & ~(align - 1));
-    if (p - arena->base < 0) {
+    assert(
+        align == 1 ||
+        align == 2 ||
+        align == 4 ||
+        align == 8 ||
+        align == 16 ||
+        align == 32
+    );
+    size_t padding = (size_t)((uintptr_t)arena->top & (align - 1));
+    if ((ptrdiff_t)size >= (arena->top - arena->base - (ptrdiff_t)padding)) {
         return NULL;
     }
-    arena->top = p;
-    return p;
+    arena->top -= padding + size;
+    return arena->top;
 }

@@ -3,6 +3,8 @@
 
 #include "aven.h"
 
+#define AVEN_PI_D 3.14159265358979323846264338327950288
+
 typedef struct { float data[2]; } Vec2;
 typedef struct { float data[3]; } Vec3;
 typedef struct { float data[4]; } Vec4;
@@ -20,8 +22,8 @@ typedef struct { Vec3 data[4]; } Mat3x4;
 typedef struct { Vec4 data[2]; } Mat4x2;
 typedef struct { Vec4 data[3]; } Mat4x3;
 
-#define vec_get(v, i) m.data[i]
-#define mat_get(m, i, j) m.data[i].data[j]
+#define vec_get(v, i) v.data[i]
+#define mat_get(m, i, j) vec_get(m.data[i], j)
 
 static Mat2 mat2_mul_mat2(Mat2 a, Mat2 b) {
     Mat2 dest;

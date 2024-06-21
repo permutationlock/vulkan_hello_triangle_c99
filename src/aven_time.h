@@ -1,9 +1,7 @@
 #ifndef AVEN_TIME_H
 #define AVEN_TIME_H
 
-#ifndef AVEN_H
-    #include "aven.h"
-#endif
+#include "aven.h"
 
 #if defined(_WIN32)
     typedef int64_t TimeSpec;

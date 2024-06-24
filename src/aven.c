@@ -12,10 +12,10 @@ void *arena_alloc(Arena *arena, size_t size, size_t align) {
         align == 32
     );
     unsigned char *mem = arena->top - size;
-    mem -= (uintptr_t)mem & (align - 1);
-    if ((mem - arena->base) < 0) {
+    size_t padding = (size_t)((uintptr_t)mem & (align - 1));
+    if ((arena->top - arena->base) < (ptrdiff_t)(size + padding)) {
         return NULL;
     }
-    arena->top = mem;
+    arena->top = mem - padding;
     return arena->top;
 }

@@ -7,7 +7,7 @@ layout(location = 1) in vec3 in_color;
 
 layout(location = 0) out vec3 frag_color;
 
-layout(std430, binding = 0) uniform UniformBufferObject {
+layout(scalar, binding = 0) uniform UniformBufferObject {
     mat2 view;
 } ubo;
 

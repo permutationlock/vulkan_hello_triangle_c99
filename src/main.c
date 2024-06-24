@@ -16,7 +16,8 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#define ARENA_SIZE 1024 * 1024 * 8
+#define MASTER_ARENA_SIZE 1024 * 1024 * 8
+#define SWAPCHAIN_ARENA_SIZE 1024
 #define MAX_FRAMES_IN_FLIGHT 2
 
 #ifdef ENABLE_VALIDATION_LAYERS
@@ -26,11 +27,9 @@ const char *VALIDATION_LAYERS[] = {
 #endif // ENABLE_VALIDATION_LAYERS
 
 const char *DEVICE_EXTENSIONS[] = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-    VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
+    "VK_KHR_swapchain",
 #ifdef ENABLE_VALIDATION_LAYERS
-    VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+    "VK_KHR_shader_non_semantic_info",
 #endif
 };
 
@@ -44,10 +43,12 @@ const Vertex VERTICES[] = {
     { .pos = { { -0.5f, -0.5f } }, .color = { { 1.0f, 0.0f, 0.0f } } },
     { .pos = { {  0.5f, -0.5f } }, .color = { { 0.0f, 1.0f, 0.0f } } },
     { .pos = { {  0.5f,  0.5f } }, .color = { { 0.0f, 0.0f, 1.0f } } },
-    { .pos = { { -0.5f,  0.5f } }, .color = { { 1.0f, 1.0f, 1.0f } } }
+    { .pos = { { -0.5f,  0.5f } }, .color = { { 1.0f, 1.0f, 1.0f } } },
 };
 
-const uint16_t INDICES[] = { 0, 1, 2, 2, 3, 0 };
+typedef uint16_t Index;
+
+const Index INDICES[] = { 0, 1, 2, 2, 3, 0 };
 
 VkVertexInputBindingDescription VERTEX_BINDING_DESCRIPTIONS[] = {
     {
@@ -188,6 +189,7 @@ typedef enum {
     APP_ERROR_CREATE_COLOR_RESOURCES_CREATE,
     APP_ERROR_CREATE_COLOR_RESOURCES_ALLOC,
     APP_ERROR_MAIN_LOOP_TIME,
+    APP_ERROR_RUN_TIME,
 #ifdef ENABLE_VALIDATION_LAYERS
     APP_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
     APP_ERROR_SETUP_DEBUG_MESSENGER,
@@ -740,14 +742,13 @@ static int create_logical_device(VulkanApp *app, Arena temp_arena) {
 
     VkPhysicalDeviceFeatures device_features = { 0 };
 
-    VkPhysicalDeviceScalarBlockLayoutFeaturesEXT scalar_layout_features = {
+    VkPhysicalDeviceScalarBlockLayoutFeatures scalar_layout_features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
         .scalarBlockLayout = VK_TRUE,
     };
 
-    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {
-        .sType =
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
         .pNext = &scalar_layout_features,
         .dynamicRendering = VK_TRUE,
     };
@@ -1022,7 +1023,11 @@ static int create_image_views(VulkanApp *app, Arena *swapchain_arena) {
 
 typedef Result(ByteSlice) ByteSliceResult;
 
-static ByteSliceResult read_file(const char *filename, Arena *perm_arena) {
+static ByteSliceResult read_file(
+    const char *filename,
+    Arena *perm_arena,
+    size_t alignment
+) {
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
         return (ByteSliceResult){ .error = APP_ERROR_READ_FILE_OPEN };
@@ -1043,7 +1048,7 @@ static ByteSliceResult read_file(const char *filename, Arena *perm_arena) {
     rewind(file);
 
     ByteSlice bytes = {
-        .ptr = arena_alloc(perm_arena, (size_t)len, 1),
+        .ptr = arena_alloc(perm_arena, (size_t)len, alignment),
         .len = (size_t)len,
     };
     if (bytes.ptr == NULL) {
@@ -1119,7 +1124,11 @@ static int create_descriptor_set_layout(VulkanApp *app) {
 static int create_graphics_pipeline(VulkanApp *app, Arena temp_arena) {
     ByteSlice vert_shader_code;
     {
-        ByteSliceResult result = read_file("shaders/vert.spv", &temp_arena);
+        ByteSliceResult result = read_file(
+            "shaders/vert.spv",
+            &temp_arena,
+            alignof(uint32_t)
+        );
         if (result.error != 0) {
             return result.error;
         }
@@ -1129,7 +1138,11 @@ static int create_graphics_pipeline(VulkanApp *app, Arena temp_arena) {
 
     ByteSlice frag_shader_code;
     {
-        ByteSliceResult result = read_file("shaders/frag.spv", &temp_arena);
+        ByteSliceResult result = read_file(
+            "shaders/frag.spv",
+            &temp_arena,
+            alignof(uint32_t)
+        );
         if (result.error != 0) {
             return result.error;
         }
@@ -1296,8 +1309,8 @@ static int create_graphics_pipeline(VulkanApp *app, Arena temp_arena) {
         app->swapchain_image_format
     };
 
-    VkPipelineRenderingCreateInfoKHR pipeline_rendering_create_info = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+    VkPipelineRenderingCreateInfo pipeline_rendering_create_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = countof(attachment_formats),
         .pColorAttachmentFormats = attachment_formats,
     };
@@ -1969,35 +1982,41 @@ static int record_command_buffer(
         },
     };
 
-    VkRenderingAttachmentInfoKHR attachments[] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .imageView = app->color_image_view,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT,
-            .resolveImageView = slice_get(
-                app->swapchain_image_views,
-                image_index
-            ),
-            .resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = clear_color,
-        },
+    VkRenderingAttachmentInfo attachment = {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = clear_color,
     };
+    if (app->msaa_samples == VK_SAMPLE_COUNT_1_BIT) {
+        attachment.imageView = slice_get(
+            app->swapchain_image_views,
+            image_index
+        );
+    } else {
+        attachment.imageView = app->color_image_view;
+        attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        attachment.resolveImageView = slice_get(
+            app->swapchain_image_views,
+            image_index
+        );
+        attachment.resolveImageLayout =
+            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
 
-    VkRenderingInfoKHR render_info = {
+    VkRenderingInfo render_info = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .renderArea = {
             .offset = { 0, 0 },
             .extent = app->swapchain_extent,
         },
         .layerCount = 1,
-        .colorAttachmentCount = countof(attachments),
-        .pColorAttachments = attachments,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachment,
     };
 
-    vkCmdBeginRenderingKHR(command_buffer, &render_info);
+    vkCmdBeginRendering(command_buffer, &render_info);
 
     vkCmdBindPipeline(
         command_buffer,
@@ -2032,7 +2051,8 @@ static int record_command_buffer(
         vertex_buffers,
         offsets
     );
-    
+
+    assert(sizeof(*INDICES) == sizeof(uint16_t));
     vkCmdBindIndexBuffer(
         command_buffer,
         app->index_buffer,
@@ -2075,7 +2095,7 @@ static int record_command_buffer(
 
         vkCmdPipelineBarrier(
             command_buffer,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
             0,
             0,
@@ -2096,9 +2116,11 @@ static int record_command_buffer(
 }
 
 static void cleanup_swapchain(VulkanApp *app) {
-    vkDestroyImageView(app->device, app->color_image_view, NULL);
-    vkDestroyImage(app->device, app->color_image, NULL);
-    vkFreeMemory(app->device, app->color_image_memory, NULL);
+    if (app->msaa_samples != VK_SAMPLE_COUNT_1_BIT) {
+        vkDestroyImageView(app->device, app->color_image_view, NULL);
+        vkDestroyImage(app->device, app->color_image, NULL);
+        vkFreeMemory(app->device, app->color_image_memory, NULL);
+    }
 
     for (size_t i = 0; i < app->swapchain_image_views.len; ++i) {
         vkDestroyImageView(
@@ -2170,9 +2192,11 @@ static int recreate_swapchain(
         return error;
     }
 
-    error = create_color_resources(app);
-    if (error != 0) {
-        return error;
+    if (app->msaa_samples != VK_SAMPLE_COUNT_1_BIT) {
+        error = create_color_resources(app);
+        if (error != 0) {
+            return error;
+        }
     }
 
     return 0;
@@ -2240,9 +2264,11 @@ static int init_vulkan(
         return error;
     }
 
-    error = create_color_resources(app);
-    if (error != 0) {
-        return error;
+    if (app->msaa_samples != VK_SAMPLE_COUNT_1_BIT) {
+        error = create_color_resources(app);
+        if (error != 0) {
+            return error;
+        }
     }
     
     error = create_vertex_buffer(app);
@@ -2405,8 +2431,14 @@ static int main_loop(
         int64_t delta_time = timespec_diff(&current_time, &app->last_update);
         if (delta_time >= 1000L) {
             float fdt = (float)delta_time / (1000.0f * 1000.0f * 1000.0f);
-            app->rotation_angle += fdt * 3.1415f / 5.0f;
+            app->rotation_angle += fdt * AVEN_GLM_PI_F / 8.0f;
             app->last_update = current_time;
+
+            float n = 1.0f;
+            while ((n * 2.0f * AVEN_GLM_PI_F) < app->rotation_angle) {
+                n += 1.0f;
+            }
+            app->rotation_angle -= (n - 1.0f) * 2.0f * AVEN_GLM_PI_F;
         }
     }
 
@@ -2472,8 +2504,8 @@ static void cleanup(VulkanApp *app) {
 
 static int run(VulkanApp *app, Arena temp_arena) {
     Arena swapchain_arena = arena_init(
-        arena_alloc(&temp_arena, ARENA_SIZE, 1),
-        ARENA_SIZE
+        arena_alloc(&temp_arena, SWAPCHAIN_ARENA_SIZE, 1),
+        SWAPCHAIN_ARENA_SIZE
     );
     assert(swapchain_arena.base != NULL);
 
@@ -2489,6 +2521,11 @@ static int run(VulkanApp *app, Arena temp_arena) {
         return error;
     }
 
+    error = timespec_now(&app->last_update);
+    if (error != 0) {
+        return APP_ERROR_RUN_TIME;
+    }
+
     error = main_loop(app, &swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
@@ -2501,8 +2538,8 @@ static int run(VulkanApp *app, Arena temp_arena) {
 
 int main(void) {
     Arena arena = arena_init(
-        malloc(2 * ARENA_SIZE),
-        2 * ARENA_SIZE
+        malloc(MASTER_ARENA_SIZE),
+        MASTER_ARENA_SIZE
     );
     if (arena.base == NULL) {
         return APP_ERROR_MAIN_MALLOC;

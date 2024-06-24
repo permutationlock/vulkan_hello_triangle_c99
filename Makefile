@@ -12,7 +12,7 @@ SHADERC = glslc
 SHADERFLAGS = --target-env=vulkan1.3 -Werror -g
 
 INCLUDEFLAGS = -Ideps/glfw/include -Ideps/volk/include -Ideps/vulkan/include \
-	-Ideps/wayland/include -Ideps/xkbcommon/include
+	-Ideps/wayland/include -Ideps/xkbcommon/include -Ideps/X11/include
 LDFLAGS = -lm -ldl -lpthread
 
 .PHONY: all shaders clean cleanobj cleanshaders
@@ -25,7 +25,7 @@ src/main.o: src/main.c
 	$(CC) $(CFLAGS) $(INCLUDEFLAGS) -c -o $@ $<
 src/aven.o: src/aven.c
 	$(CC) $(CFLAGS) $(INCLUDEFLAGS) -c -o $@ $<
-deps/glfw/glfw.o: deps/glfw/glfw.c	
+deps/glfw/glfw.o: deps/glfw/glfw.c
 	$(CC) $(GLFW_CFLAGS) $(INCLUDEFLAGS) -c -o $@ $<
 cleanobjects:
 	rm -f vulkan_app* src/main.o src/aven.o deps/glfw/glfw.o

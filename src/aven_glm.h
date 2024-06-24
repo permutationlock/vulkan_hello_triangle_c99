@@ -3,7 +3,8 @@
 
 #include "aven.h"
 
-#define AVEN_PI_D 3.14159265358979323846264338327950288
+#define AVEN_GLM_PI_D 3.14159265358979323846264338327950288
+#define AVEN_GLM_PI_F 3.14159265358979323846264338327950288f
 
 typedef struct { float data[2]; } Vec2;
 typedef struct { float data[3]; } Vec3;

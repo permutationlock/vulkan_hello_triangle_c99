@@ -15,31 +15,32 @@ The coding style and project organization was inpsired by [Zig][21],
 
 To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
-The project supports Linux [Wayland][13] targets and Windows targets.
+The project supports Linux [X11][22] and [Wayland][13] targets and Windows
+targets.
 There are **ZERO** build dependencies beyond the `libc` required
 by your target.
 
 The project vendors and builds [GLFW][2] and [volk][11]. Also included
-are the headers for [Vulkan][3], [xkbcommon][17], [Wayland][13], and the
-[Wayland protocols][14].
+are the headers for [Vulkan][3], [xkbcommon][17], [X11][22], [Wayland][13],
+and the [Wayland protocols][14].
 
 To run the application you will need the [Vulkan loader][4]
 and a Vulkan driver for your graphics card. To run executables built with
 `ENABLE_VALIDATION_LAYERS` defined (which is the case in the default `CFLAGS`)
 you will need to have the [Vulkan validation layers][12] installed as well.
 
-To run on Linux you will also need a Wayland compositor, the Wayland shared
-libraries, and the [xkbcommon][17] shared library.
-Note that installing virtually any Wayland compositor capable of Vulkan
-support will also install these libraries by default.
+To run the application on Linux you will also need an X.Org server or a Wayland
+compositor, and the corresponding shared libraries.
+Note that installing virtually any X11 or Wayland window manager capable of
+Vulkan support will install the required libraries by default.
 
 ## Building
 
-The entire project builds with a single tiny `Makefile`.
+The project builds with a single tiny `Makefile`.
 
 ### Building on Linux
 
-By default `make` will build with [gcc][7] and compile shaders with
+By default `make` will build an X11 app with [gcc][7] and compile shaders with
 [glslc][8].
 
 ```
@@ -52,6 +53,13 @@ environment variables to e.g. use [clang][20].
 
 ```
 make CC="clang" -j5
+./vulkan_app
+```
+
+You can build a Wayland application by defining the corresponding GLFW macro.
+
+```
+make GLFW_CFLAGS="-D_GLFW_WAYLAND -std=c99 -g3" -j5
 ./vulkan_app
 ```
 

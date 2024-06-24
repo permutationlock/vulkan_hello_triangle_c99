@@ -15,7 +15,7 @@ The coding style and project organization was inpsired by [Zig][21],
 
 To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
-The project supports Linux [X11][22] and [Wayland][13] targets and Windows
+The project supports Linux [X][22] and [Wayland][13] targets and Windows
 targets.
 There are **ZERO** build dependencies beyond the `libc` required
 by your target.
@@ -140,3 +140,4 @@ make CC="zig cc -target x86_64-linux-gnu" CFLAGS="-std=c99 -O2" \
 [19]: https://github.com/raysan5/raylib
 [20]: https://clang.llvm.org/
 [21]: https://ziglang.org/
+[22]: https://www.x.org/wiki/

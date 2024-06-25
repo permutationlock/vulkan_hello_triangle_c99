@@ -185,6 +185,7 @@ typedef enum {
     APP_ERROR_CREATE_SYNC_OBJECTS_AVAILABLE,
     APP_ERROR_CREATE_SYNC_OBJECTS_FINISHED,
     APP_ERROR_CREATE_SYNC_OBJECTS_FENCE,
+    APP_ERROR_DRAW_FRAME_FENCE,
     APP_ERROR_DRAW_FRAME_SWAPCHAIN,
     APP_ERROR_DRAW_FRAME_SUBMIT,
     APP_ERROR_FIND_MEMORY_TYPE,
@@ -2324,16 +2325,23 @@ static int draw_frame(
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
-    vkWaitForFences(
+    VkResult result = vkWaitForFences(
         app->device,
         1,
         &app->in_flight_fences[app->current_frame],
         VK_TRUE,
         TIMESTEP_NS
     );
+    if (result != VK_SUCCESS) {
+        if (result == VK_TIMEOUT) {
+            return 0;
+        }
+
+        return APP_ERROR_DRAW_FRAME_FENCE;
+    }
 
     uint32_t image_index;
-    VkResult result = vkAcquireNextImageKHR(
+    result = vkAcquireNextImageKHR(
         app->device,
         app->swapchain,
         TIMESTEP_NS,
@@ -2343,6 +2351,8 @@ static int draw_frame(
     );
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         return recreate_swapchain(app, swapchain_arena, temp_arena);
+    } else if (result == VK_TIMEOUT) {
+        return 0;
     } else if (result != VK_SUCCESS and result != VK_SUBOPTIMAL_KHR) {
         return APP_ERROR_DRAW_FRAME_SWAPCHAIN;
     }
@@ -2424,13 +2434,11 @@ static int draw_frame(
 }
 
 void timestep_update(GameData *game_data) {
-    float fdt = (float)(TIMESTEP_NS) /
-        (1000.0f * 1000.0f * 1000.0f);
-    game_data->rotation_angle += fdt * AVEN_GLM_PI_F / 8.0f;
+    float fdt = (float)(TIMESTEP_NS) / (1000.0f * 1000.0f * 1000.0f);
+    game_data->rotation_angle += fdt * AVEN_GLM_PI_F / 6.0f;
     if (game_data->rotation_angle >= 2 * AVEN_GLM_PI_F) {
         game_data->rotation_angle -= 2 * AVEN_GLM_PI_F;
     }
-    printf("rotation: %f\n", (double)game_data->rotation_angle);
 }
 
 static int main_loop(

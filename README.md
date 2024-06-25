@@ -16,12 +16,12 @@ The coding style and project organization was inpsired by [Zig][21],
 To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
 The project supports Linux and Windows targets.
-There are **ZERO** build dependencies beyond a `libc` for your target
-that supports [pthreads][23].
+There are **ZERO** build dependencies beyond a `libc` for your target.
 
-The project vendors and builds [volk][11] and a slightly modified version
-of [GLFW][2]. Also included are headers for [Vulkan][3], [xkbcommon][17],
-[X11][22], [Wayland][13], and the [Wayland protocols][14].
+The project vendors and builds [volk][11], a slightly modified version
+of [GLFW][2], and optionally [winpthreads][23]. Also included are headers for
+[Vulkan][3], [xkbcommon][17], [X11][22], [Wayland][13], and the
+[Wayland protocols][14].
 
 To run the application you will need the [Vulkan loader][4]
 and a Vulkan driver for your graphics card. To run executables built with
@@ -33,7 +33,7 @@ To run on Linux you will also need either an [X11][22] server or a
 
 ## Building
 
-The project builds with a single tiny `Makefile`.
+The project builds with a single simple `Makefile`.
 
 ### Building on Linux
 
@@ -75,7 +75,7 @@ You can also cross-compile a Windows application with [zig cc][21] (or any
 clang toolchain with a Windows Mingw target).
 
 ```
-LOCALWINPTHREADS="YES" make CC="zig cc -target x86_64-windows-gnu" \
+make LOCALWINPTHREADS="YES" CC="zig cc -target x86_64-windows-gnu" \
     LDFLAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
 ```
 
@@ -92,7 +92,7 @@ make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c99 -O2 -DNDEBUG" \
 You can also build a Windows app with [Zig][21].
 
 ```
-LOCALWINPTHREADS="YES" make CC="zig cc" \
+make LOCALWINPTHREADS="YES" CC="zig cc" \
     LDLFAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
 mv vulkan_app vulkan_app.exe
 ./vulkan_app.exe
@@ -131,3 +131,4 @@ make CC="zig cc -target x86_64-linux-gnu" CFLAGS="-std=c99 -O2" \
 [20]: https://clang.llvm.org/
 [21]: https://ziglang.org/
 [22]: https://www.x.org/wiki/
+[23]: https://github.com/mingw-w64/mingw-w64/tree/master/mingw-w64-libraries/winpthreads

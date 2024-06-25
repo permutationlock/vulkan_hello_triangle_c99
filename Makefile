@@ -35,7 +35,7 @@ src/aven.o: src/aven.c
 deps/glfw/glfw.o: deps/glfw/glfw.c
 	$(CC) $(GLFW_CFLAGS) $(INCLUDEFLAGS) -c -o $@ $<
 deps/winpthreads/winpthreads.o: deps/winpthreads/winpthreads.c
-	$(CC) $(WINPTHREADS_CFLAGS) -Ideps/winpthreads/include -c -o $@ $<
+	$(CC) $(WINPTHREADS_CFLAGS) $(INCLUDEFLAGS) -c -o $@ $<
 cleanobjects:
 	rm -f vulkan_app* $(OBJS)
 

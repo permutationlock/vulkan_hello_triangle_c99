@@ -234,7 +234,7 @@ static int translateState(int state)
 
 // Translates an X11 key code to a GLFW key token
 //
-static int translateKey(int scancode)
+static int translateX11Key(int scancode)
 {
     // Use the pre-filled LUT (see createKeyTables() in x11_init.c)
     if (scancode < 0 || scancode > 255)
@@ -1080,7 +1080,7 @@ static const char* getSelectionString(Atom selection)
 
 // Make the specified window and its video mode active on its monitor
 //
-static void acquireMonitor(_GLFWwindow* window)
+static void acquireX11Monitor(_GLFWwindow* window)
 {
     if (_glfw.x11.saver.count == 0)
     {
@@ -1119,7 +1119,7 @@ static void acquireMonitor(_GLFWwindow* window)
 
 // Remove the window and restore the original video mode
 //
-static void releaseMonitor(_GLFWwindow* window)
+static void releaseX11Monitor(_GLFWwindow* window)
 {
     if (window->monitor->window != window)
         return;
@@ -1241,7 +1241,7 @@ static void processEvent(XEvent *event)
 
         case KeyPress:
         {
-            const int key = translateKey(keycode);
+            const int key = translateX11Key(keycode);
             const int mods = translateState(event->xkey.state);
             const int plain = !(mods & (GLFW_MOD_CONTROL | GLFW_MOD_ALT));
 
@@ -1313,7 +1313,7 @@ static void processEvent(XEvent *event)
 
         case KeyRelease:
         {
-            const int key = translateKey(keycode);
+            const int key = translateX11Key(keycode);
             const int mods = translateState(event->xkey.state);
 
             if (!_glfw.x11.xkb.detectable)
@@ -1804,9 +1804,9 @@ static void processEvent(XEvent *event)
                     if (window->monitor)
                     {
                         if (iconified)
-                            releaseMonitor(window);
+                            releaseX11Monitor(window);
                         else
-                            acquireMonitor(window);
+                            acquireX11Monitor(window);
                     }
 
                     window->x11.iconified = iconified;
@@ -2023,7 +2023,7 @@ GLFWbool _glfwCreateWindowX11(_GLFWwindow* window,
     {
         _glfwShowWindowX11(window);
         updateWindowMode(window);
-        acquireMonitor(window);
+        acquireX11Monitor(window);
 
         if (wndconfig->centerCursor)
             _glfwCenterCursorInContentArea(window);
@@ -2048,7 +2048,7 @@ void _glfwDestroyWindowX11(_GLFWwindow* window)
         enableCursor(window);
 
     if (window->monitor)
-        releaseMonitor(window);
+        releaseX11Monitor(window);
 
     if (window->x11.ic)
     {
@@ -2204,7 +2204,7 @@ void _glfwSetWindowSizeX11(_GLFWwindow* window, int width, int height)
     if (window->monitor)
     {
         if (window->monitor->window == window)
-            acquireMonitor(window);
+            acquireX11Monitor(window);
     }
     else
     {
@@ -2475,7 +2475,7 @@ void _glfwSetWindowMonitorX11(_GLFWwindow* window,
         if (monitor)
         {
             if (monitor->window == window)
-                acquireMonitor(window);
+                acquireX11Monitor(window);
         }
         else
         {
@@ -2494,7 +2494,7 @@ void _glfwSetWindowMonitorX11(_GLFWwindow* window,
     {
         _glfwSetWindowDecoratedX11(window, window->decorated);
         _glfwSetWindowFloatingX11(window, window->floating);
-        releaseMonitor(window);
+        releaseX11Monitor(window);
     }
 
     _glfwInputWindowMonitor(window, monitor);
@@ -2509,7 +2509,7 @@ void _glfwSetWindowMonitorX11(_GLFWwindow* window,
         }
 
         updateWindowMode(window);
-        acquireMonitor(window);
+        acquireX11Monitor(window);
     }
     else
     {

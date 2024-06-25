@@ -15,24 +15,21 @@ The coding style and project organization was inpsired by [Zig][21],
 
 To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
-The project supports Linux [X][22] and [Wayland][13] targets and Windows
-targets.
+The project supports Linux and Windows targets.
 There are **ZERO** build dependencies beyond the `libc` required
 by your target.
 
-The project vendors and builds [GLFW][2] and [volk][11]. Also included
-are the headers for [Vulkan][3], [xkbcommon][17], [X11][22], [Wayland][13],
-and the [Wayland protocols][14].
+The project vendors and builds [volk][11] and a slightly modified version
+of [GLFW][2]. Also included are headers for [Vulkan][3], [xkbcommon][17],
+[X11][22], [Wayland][13], and the [Wayland protocols][14].
 
 To run the application you will need the [Vulkan loader][4]
 and a Vulkan driver for your graphics card. To run executables built with
 `ENABLE_VALIDATION_LAYERS` defined (which is the case in the default `CFLAGS`)
 you will need to have the [Vulkan validation layers][12] installed as well.
 
-To run the application on Linux you will also need an X.Org server or a Wayland
-compositor, and the corresponding shared libraries.
-Note that installing virtually any X11 or Wayland window manager capable of
-Vulkan support will install the required libraries by default.
+To run on Linux you will also need either an [X11][22] server or a
+[Wayland][13] compositor, along with the corresponding shared libraries.
 
 ## Building
 
@@ -40,31 +37,24 @@ The project builds with a single tiny `Makefile`.
 
 ### Building on Linux
 
-By default `make` will build an X11 app with [gcc][7] and compile shaders with
-[glslc][8].
+By default `make` will build a debug app with [gcc][7] as the C compiler and
+[glslc][8] as the shader compiler.
 
 ```
 make -j5
 ./vulkan_app
 ```
 
-If you have another compiler, then you can modify the appropriate
-environment variables to e.g. use [clang][20].
+To use a different compiler you can modify the appropriate environment
+variable.
 
 ```
 make CC="clang" -j5
 ./vulkan_app
 ```
 
-You can build a Wayland application by defining the corresponding GLFW macro.
-
-```
-make GLFW_CFLAGS="-D_GLFW_WAYLAND -std=c99 -g3" -j5
-./vulkan_app
-```
-
-The project will even build with the awesome and simple [cproc][1]
-compiler[^1].
+With a little define hack to wrangle the glibc headers, you can even
+build an application using the awesome and simple [cproc][1] compiler[^1].
 
 ```
 make CC="cproc" CFLAGS="-D\"__attribute__(x)=\"" \
@@ -91,8 +81,7 @@ make CC="zig cc -target x86_64-windows-gnu" \
 
 ### Building on Windows
 
-On a Windows machine you can compile and run a Windows application with
-Mingw-w64.
+On a Windows machine you can compile an application with [Mingw-w64][9].
 
 ```
 make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c99 -O2 -DNDEBUG" \
@@ -100,7 +89,7 @@ make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c99 -O2 -DNDEBUG" \
 ./vulkan_app.exe
 ```
 
-Or build and run a Windows app with Zig.
+You can also build a Windows app with [Zig][21].
 
 ```
 make CC="zig cc" LDLFAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"

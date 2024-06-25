@@ -1156,7 +1156,7 @@ static GLFWbool flushDisplay(void)
     return GLFW_TRUE;
 }
 
-static int translateKey(uint32_t scancode)
+static int translateWLKey(uint32_t scancode)
 {
     if (scancode < sizeof(_glfw.wl.keycodes) / sizeof(_glfw.wl.keycodes[0]))
         return _glfw.wl.keycodes[scancode];
@@ -1270,7 +1270,7 @@ static void handleEvents(double* timeout)
                 for (uint64_t i = 0; i < repeats; i++)
                 {
                     _glfwInputKey(_glfw.wl.keyboardFocus,
-                                  translateKey(_glfw.wl.keyRepeatScancode),
+                                  translateWLKey(_glfw.wl.keyRepeatScancode),
                                   _glfw.wl.keyRepeatScancode,
                                   GLFW_PRESS,
                                   _glfw.wl.xkb.modifiers);
@@ -1773,7 +1773,7 @@ static void keyboardHandleKey(void* userData,
     if (!window)
         return;
 
-    const int key = translateKey(scancode);
+    const int key = translateWLKey(scancode);
     const int action =
         state == WL_KEYBOARD_KEY_STATE_PRESSED ? GLFW_PRESS : GLFW_RELEASE;
 

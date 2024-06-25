@@ -1,10 +1,8 @@
 #if defined(_WIN32)
     #define _GLFW_WIN32
-#endif
-#if defined(__linux__)
-    #ifndef _GLFW_WAYLAND
-        #define _GLFW_X11
-    #endif
+#elif defined(__linux__)
+    #define _GLFW_WAYLAND
+    #define _GLFW_X11
 #endif
 
 #define _GNU_SOURCE
@@ -29,9 +27,7 @@
 
     #include "src/egl_context.c"
     #include "src/osmesa_context.c"
-#endif
-
-#if defined(__linux__) 
+#elif defined(__linux__) 
     #include "src/posix_poll.c"
     #include "src/posix_module.c"
     #include "src/posix_thread.c"
@@ -42,16 +38,12 @@
     #include "src/egl_context.c"
     #include "src/osmesa_context.c"
 
-    #ifdef _GLFW_WAYLAND
-        #include "src/wl_init.c"
-        #include "src/wl_monitor.c"
-        #include "src/wl_window.c"
-    #endif
+    #include "src/wl_init.c"
+    #include "src/wl_monitor.c"
+    #include "src/wl_window.c"
 
-    #ifdef _GLFW_X11
-        #include "src/x11_init.c"
-        #include "src/x11_monitor.c"
-        #include "src/x11_window.c"
-        #include "src/glx_context.c"
-    #endif
+    #include "src/x11_init.c"
+    #include "src/x11_monitor.c"
+    #include "src/x11_window.c"
+    #include "src/glx_context.c"
 #endif

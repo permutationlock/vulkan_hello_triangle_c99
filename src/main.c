@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #if __STDC_VERSION__ < 201112L
     #define AVEN_MAX_ALIGNMENT 16
 #endif
@@ -5,10 +7,14 @@
 #include "aven_glm.h"
 #include "aven_time.h"
 
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <pthread.h>
+#include <unistd.h>
 
 #define VOLK_IMPLEMENTATION
 #include <volk.h>
@@ -19,6 +25,7 @@
 #define MASTER_ARENA_SIZE 1024 * 1024 * 8
 #define SWAPCHAIN_ARENA_SIZE 1024
 #define MAX_FRAMES_IN_FLIGHT 2
+#define GAME_TIMESTEP_NS (4L * 1000L * 1000L)
 
 #ifdef ENABLE_VALIDATION_LAYERS
 const char *VALIDATION_LAYERS[] = {
@@ -75,6 +82,12 @@ VkVertexInputAttributeDescription VERTEX_ATTRIBUTE_DESCRIPTIONS[] = {
 
 typedef Slice(VkImage) VkImageSlice;
 typedef Slice(VkImageView) VkImageViewSlice;
+
+typedef struct {
+    float rotation_angle;
+    bool done;
+    pthread_mutex_t mutex;
+} GameData;
 
 typedef struct {
     uint32_t width;
@@ -134,8 +147,7 @@ typedef struct {
     uint32_t current_frame;
     bool framebuffer_resized;
 
-    TimeSpec last_update;
-    float rotation_angle;
+    GameData game_data;
 } VulkanApp;
 
 typedef enum {
@@ -188,7 +200,8 @@ typedef enum {
     APP_ERROR_CREATE_DESCRIPTOR_SETS,
     APP_ERROR_CREATE_COLOR_RESOURCES_CREATE,
     APP_ERROR_CREATE_COLOR_RESOURCES_ALLOC,
-    APP_ERROR_MAIN_LOOP_TIME,
+    APP_ERROR_MAIN_LOOP_THREAD,
+    APP_ERROR_MAIN_LOOP_JOIN,
     APP_ERROR_RUN_TIME,
 #ifdef ENABLE_VALIDATION_LAYERS
     APP_ERROR_CHECK_VALIDATION_LAYER_SUPPORT_ALLOC,
@@ -2145,8 +2158,15 @@ static void update_uniform_buffer(
         { { 0.0f, side / height } }
     } };
 
-    float sin_rangle = sinf(app->rotation_angle);
-    float cos_rangle = cosf(app->rotation_angle);
+    int error = pthread_mutex_lock(&app->game_data.mutex);
+    assert(error == 0);
+
+    float sin_rangle = sinf(app->game_data.rotation_angle);
+    float cos_rangle = cosf(app->game_data.rotation_angle);
+
+    error = pthread_mutex_unlock(&app->game_data.mutex);
+    assert(error == 0);
+
     Mat2 rotation_matrix = { {
         { { cos_rangle, -sin_rangle } },
         { { sin_rangle, cos_rangle } }
@@ -2413,36 +2433,101 @@ static int draw_frame(
     return 0;
 }
 
+void game_step_update(GameData *game_data) {
+    float fdt = (float)(GAME_TIMESTEP_NS) /
+        (1000.0f * 1000.0f * 1000.0f);
+    game_data->rotation_angle += fdt * AVEN_GLM_PI_F / 8.0f;
+}
+
+void *game_loop(void *arg) {
+    GameData *game_data = arg;
+
+    TimeSpec last_update;
+    int error = clock_gettime(CLOCK_MONOTONIC, &last_update);
+    assert(error == 0);
+
+    int64_t delta_time = 0;
+
+    while (true) {
+        TimeSpec current_time;
+        error = clock_gettime(CLOCK_MONOTONIC, &current_time);
+        assert(error == 0);
+
+        delta_time += timespec_diff(&current_time, &last_update);
+        if (delta_time >= GAME_TIMESTEP_NS) {
+            error = pthread_mutex_lock(&game_data->mutex);
+            assert(error == 0);
+            
+            if (game_data->done) {
+                return NULL;
+            }
+
+            do {
+                last_update = current_time;
+                delta_time -= GAME_TIMESTEP_NS;
+                game_step_update(game_data);
+            } while (delta_time >= GAME_TIMESTEP_NS);
+
+            error = pthread_mutex_unlock(&game_data->mutex);
+            assert(error == 0);
+        }
+
+        current_time.tv_nsec += GAME_TIMESTEP_NS - delta_time;
+        if (current_time.tv_nsec > 1000L * 1000L * 1000L) {
+            current_time.tv_sec += 1;
+            current_time.tv_nsec -= 1000L * 1000L * 1000L;
+        }
+
+        error = clock_nanosleep(
+            CLOCK_MONOTONIC,
+            TIMER_ABSTIME,
+            &current_time,
+            NULL
+        );
+        assert(error == 0 || error == EINTR);
+    }
+
+    return NULL;
+}
+
 static int main_loop(
     VulkanApp *app,
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
+    pthread_mutex_init(&app->game_data.mutex, NULL);
+
+    pthread_t game_thread;
+    int error = pthread_create(
+        &game_thread,
+        NULL,
+        game_loop,
+        &app->game_data
+    );
+    if (error != 0) {
+        return APP_ERROR_MAIN_LOOP_THREAD;
+    }
+
     while (!glfwWindowShouldClose(app->window)) {
         glfwPollEvents();
         draw_frame(app, swapchain_arena, temp_arena);
-
-        TimeSpec current_time;
-        int result = timespec_now(&current_time);
-        if (result != 0) {
-            return APP_ERROR_MAIN_LOOP_TIME;
-        }
-
-        int64_t delta_time = timespec_diff(&current_time, &app->last_update);
-        if (delta_time >= 1000L) {
-            float fdt = (float)delta_time / (1000.0f * 1000.0f * 1000.0f);
-            app->rotation_angle += fdt * AVEN_GLM_PI_F / 8.0f;
-            app->last_update = current_time;
-
-            float n = 1.0f;
-            while ((n * 2.0f * AVEN_GLM_PI_F) < app->rotation_angle) {
-                n += 1.0f;
-            }
-            app->rotation_angle -= (n - 1.0f) * 2.0f * AVEN_GLM_PI_F;
-        }
     }
 
+    error = pthread_mutex_lock(&app->game_data.mutex);
+    assert(error == 0);
+
+    app->game_data.done = true;
+
+    error = pthread_mutex_unlock(&app->game_data.mutex);
+    assert(error == 0);
+
     vkDeviceWaitIdle(app->device);
+
+    void *rvalue;
+    error = pthread_join(game_thread, &rvalue);
+    if (error != 0) {
+        return APP_ERROR_MAIN_LOOP_JOIN;
+    }
 
     return 0;
 }
@@ -2519,11 +2604,6 @@ static int run(VulkanApp *app, Arena temp_arena) {
     error = init_vulkan(app, &swapchain_arena, temp_arena);
     if (error != 0) {
         return error;
-    }
-
-    error = timespec_now(&app->last_update);
-    if (error != 0) {
-        return APP_ERROR_RUN_TIME;
     }
 
     error = main_loop(app, &swapchain_arena, temp_arena);

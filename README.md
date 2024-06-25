@@ -16,8 +16,8 @@ The coding style and project organization was inpsired by [Zig][21],
 To build the project you will need a C compiler that supports C99 or later,
 as well as a [GLSL][5] to [SPIR-V][6] compiler.
 The project supports Linux and Windows targets.
-There are **ZERO** build dependencies beyond the `libc` required
-by your target.
+There are **ZERO** build dependencies beyond a `libc` for your target
+that supports [pthreads][23].
 
 The project vendors and builds [volk][11] and a slightly modified version
 of [GLFW][2]. Also included are headers for [Vulkan][3], [xkbcommon][17],
@@ -75,7 +75,7 @@ You can also cross-compile a Windows application with [zig cc][21] (or any
 clang toolchain with a Windows Mingw target).
 
 ```
-make CC="zig cc -target x86_64-windows-gnu" \
+LOCALWINPTHREADS="YES" make CC="zig cc -target x86_64-windows-gnu" \
     LDFLAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
 ```
 
@@ -92,7 +92,8 @@ make CFLAGS="-std=c99 -O2" GLFW_CFLAGS="-std=c99 -O2 -DNDEBUG" \
 You can also build a Windows app with [Zig][21].
 
 ```
-make CC="zig cc" LDLFAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
+LOCALWINPTHREADS="YES" make CC="zig cc" \
+    LDLFAGS="-lkernel32 -luser32 -lgdi32 -Wl,--subsystem,windows"
 mv vulkan_app vulkan_app.exe
 ./vulkan_app.exe
 ```

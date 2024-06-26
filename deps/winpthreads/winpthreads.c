@@ -1,5 +1,5 @@
 #ifndef _WIN32
-    #error "attempt to build winpthreads for non windows target:
+    #error "attempted to build winpthreads for a non-Windows target"
 #endif
 
 #include "src/barrier.c"

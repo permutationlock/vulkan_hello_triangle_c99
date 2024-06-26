@@ -13,8 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <unistd.h>
-
 #define VOLK_IMPLEMENTATION
 #include <volk.h>
 
@@ -23,7 +21,7 @@
 
 #define MASTER_ARENA_SIZE 1024 * 1024 * 8
 #define SWAPCHAIN_ARENA_SIZE 1024
-#define MAX_FRAMES_IN_FLIGHT 2
+#define MAX_FRAMES_IN_FLIGHT 3
 #define TIMESTEP_NS (4L * 1000L * 1000L)
 
 #ifdef ENABLE_VALIDATION_LAYERS
@@ -88,6 +86,13 @@ typedef struct {
 } GameData;
 
 typedef struct {
+    Arena *swapchain_arena;
+    Arena temp_arena;
+    TimeSpec last_update;
+    int64_t remainder;
+} UpdateContext;
+
+typedef struct {
     uint32_t width;
     uint32_t height;
 
@@ -146,6 +151,7 @@ typedef struct {
     bool framebuffer_resized;
 
     GameData game_data;
+    UpdateContext update_ctx;
 } VulkanApp;
 
 typedef enum {
@@ -216,6 +222,14 @@ void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
     app->framebuffer_resized = true;
 }
 
+static void app_update(VulkanApp *app);
+
+void window_refresh_callback(GLFWwindow *window) {
+    VulkanApp *app = glfwGetWindowUserPointer(window);
+    printf("REFRESH!\n");
+    app_update(app);
+}
+
 static int init_window(VulkanApp *app) {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -233,6 +247,7 @@ static int init_window(VulkanApp *app) {
 
     glfwSetWindowUserPointer(app->window, app);
     glfwSetFramebufferSizeCallback(app->window, framebuffer_resize_callback);
+    glfwSetWindowRefreshCallback(app->window, window_refresh_callback);
 
     return 0;
 }
@@ -2433,7 +2448,7 @@ static int draw_frame(
     return 0;
 }
 
-void timestep_update(GameData *game_data) {
+static void app_update_timestep(GameData *game_data) {
     float fdt = (float)(TIMESTEP_NS) / (1000.0f * 1000.0f * 1000.0f);
     game_data->rotation_angle += fdt * AVEN_GLM_PI_F / 6.0f;
     if (game_data->rotation_angle >= 2 * AVEN_GLM_PI_F) {
@@ -2441,41 +2456,50 @@ void timestep_update(GameData *game_data) {
     }
 }
 
+static void app_update(VulkanApp *app) {
+    TimeSpec now;
+    int error;
+    do {
+        error = clock_gettime(CLOCK_MONOTONIC, &now);
+    } while (error == EINTR);
+    assert(error == 0);
+
+    int64_t delta_time = timespec_diff(&now, &app->update_ctx.last_update) +
+        app->update_ctx.remainder;
+    while (delta_time >= TIMESTEP_NS) {
+        app->update_ctx.last_update = now;
+        delta_time -= TIMESTEP_NS;
+        app_update_timestep(&app->game_data);
+    }
+    app->update_ctx.remainder = delta_time;
+
+    error = draw_frame(
+        app,
+        app->update_ctx.swapchain_arena,
+        app->update_ctx.temp_arena
+    );
+    assert(error == 0);
+}
+
 static int main_loop(
     VulkanApp *app,
     Arena *swapchain_arena,
     Arena temp_arena
 ) {
-    TimeSpec last_update;
     int error;
-
     do {
-        error = clock_gettime(CLOCK_MONOTONIC, &last_update);
+        error = clock_gettime(CLOCK_MONOTONIC, &app->update_ctx.last_update);
     } while (error == EINTR);
     if (error != 0) {
         return APP_ERROR_MAIN_LOOP_CLOCK;
     }
 
-    int64_t remainder = 0;
+    app->update_ctx.swapchain_arena = swapchain_arena;
+    app->update_ctx.temp_arena = temp_arena;
+
     while (!glfwWindowShouldClose(app->window)) {
-        TimeSpec now;
-        do {
-            error = clock_gettime(CLOCK_MONOTONIC, &now);
-        } while (error == EINTR);
-        if (error != 0) {
-            return APP_ERROR_MAIN_LOOP_CLOCK;
-        }
-
-        int64_t delta_time = timespec_diff(&now, &last_update) + remainder;
-        while (delta_time >= TIMESTEP_NS) {
-            last_update = now;
-            delta_time -= TIMESTEP_NS;
-            timestep_update(&app->game_data);
-        }
-        remainder = delta_time;
-
+        app_update(app);
         glfwPollEvents();
-        draw_frame(app, swapchain_arena, temp_arena);
     }
 
     vkDeviceWaitIdle(app->device);

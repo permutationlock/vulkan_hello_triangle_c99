@@ -21,7 +21,7 @@
 
 #define MASTER_ARENA_SIZE 1024 * 1024 * 8
 #define SWAPCHAIN_ARENA_SIZE 1024
-#define MAX_FRAMES_IN_FLIGHT 3
+#define MAX_FRAMES_IN_FLIGHT 2
 #define TIMESTEP_NS (4L * 1000L * 1000L)
 
 #ifdef ENABLE_VALIDATION_LAYERS
@@ -44,15 +44,21 @@ typedef struct {
 typedef struct { Vec2 pos; Vec4 color; } Vertex;
 
 const Vertex VERTICES[] = {
-    { .pos = { { -0.5f, -0.5f } }, .color = { { 1.0f, 0.0f, 0.0f } } },
-    { .pos = { {  0.5f, -0.5f } }, .color = { { 0.0f, 1.0f, 0.0f } } },
-    { .pos = { {  0.5f,  0.5f } }, .color = { { 0.0f, 0.0f, 1.0f } } },
-    { .pos = { { -0.5f,  0.5f } }, .color = { { 1.0f, 1.0f, 1.0f } } },
+    { .pos = { {  0.0f,  0.0f } }, .color = { { 0.25f, 0.25f, 0.25f } } },
+    { .pos = { { -0.5f, -0.5f } }, .color = { { 1.00f, 0.00f, 0.25f } } },
+    { .pos = { {  0.5f, -0.5f } }, .color = { { 0.76f, 0.25f, 0.25f } } },
+    { .pos = { {  0.5f,  0.5f } }, .color = { { 0.05f, 0.50f, 0.25f } } },
+    { .pos = { { -0.5f,  0.5f } }, .color = { { 0.25f, 0.75f, 0.25f } } },
 };
 
 typedef uint16_t Index;
 
-const Index INDICES[] = { 0, 1, 2, 2, 3, 0 };
+const Index INDICES[] = {
+    0, 1, 2,
+    0, 2, 3,
+    0, 3, 4,
+    0, 4, 1
+};
 
 VkVertexInputBindingDescription VERTEX_BINDING_DESCRIPTIONS[] = {
     {
@@ -77,13 +83,20 @@ VkVertexInputAttributeDescription VERTEX_ATTRIBUTE_DESCRIPTIONS[] = {
     },
 };
 
-typedef Slice(VkImage) VkImageSlice;
-typedef Slice(VkImageView) VkImageViewSlice;
+#define SQUARE_MAX_VELOCITY AVEN_GLM_PI_F
+#define SQUARE_ACCELERATION (AVEN_GLM_PI_F / 2.0f)
+#define SQUARE_STOP_ACCELERATION (15.0f * AVEN_GLM_PI_F)
 
 typedef struct {
+    float rotation_velocity;
     float rotation_angle;
+    int32_t direction;
+    bool freeze;
     bool done;
 } GameData;
+
+typedef Slice(VkImage) VkImageSlice;
+typedef Slice(VkImageView) VkImageViewSlice;
 
 typedef struct {
     uint32_t width;
@@ -105,8 +118,11 @@ typedef struct {
     VkQueue present_queue;
 
     VkSwapchainKHR swapchain;
+
     VkImageSlice swapchain_images;
     VkImageViewSlice swapchain_image_views;
+    Arena base_swapchain_arena;
+
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
 
@@ -139,7 +155,6 @@ typedef struct {
 
     VkSampleCountFlagBits msaa_samples;
 
-    Arena base_swapchain_arena;
     uint32_t current_frame;
     bool framebuffer_resized;
 
@@ -214,6 +229,46 @@ void framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
     app->framebuffer_resized = true;
 }
 
+void key_callback(
+    GLFWwindow *window,
+    int key,
+    int scancode,
+    int action,
+    int mods
+) {
+    (void)scancode;
+    (void)mods;
+
+    int32_t scale = 0;
+    if (action == GLFW_PRESS) {
+        scale = 1;
+    } else if (action == GLFW_RELEASE) {
+        scale = -1;
+    }
+
+    VulkanApp *app = glfwGetWindowUserPointer(window);
+    switch (key) {
+        case GLFW_KEY_A:
+        case GLFW_KEY_LEFT:
+            app->game_data.direction += scale * 1;
+            break;
+        case GLFW_KEY_D:
+        case GLFW_KEY_RIGHT:
+            app->game_data.direction += scale * (-1);
+            break;
+        case GLFW_KEY_SPACE:
+            if (scale > 0) {
+                app->game_data.freeze = true;
+            }
+            if (scale < 0) {
+                app->game_data.freeze = false;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 static int init_window(VulkanApp *app) {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -231,6 +286,7 @@ static int init_window(VulkanApp *app) {
 
     glfwSetWindowUserPointer(app->window, app);
     glfwSetFramebufferSizeCallback(app->window, framebuffer_resize_callback);
+    glfwSetKeyCallback(app->window, key_callback);
 
     return 0;
 }
@@ -2433,9 +2489,31 @@ static int draw_frame(
 
 void timestep_update(GameData *game_data) {
     float fdt = (float)(TIMESTEP_NS) / (1000.0f * 1000.0f * 1000.0f);
-    game_data->rotation_angle += fdt * AVEN_GLM_PI_F / 6.0f;
-    if (game_data->rotation_angle >= 2 * AVEN_GLM_PI_F) {
-        game_data->rotation_angle -= 2 * AVEN_GLM_PI_F;
+
+    if (game_data->freeze) {
+        float acceleration = SQUARE_STOP_ACCELERATION *
+            (0.0f - game_data->rotation_velocity) / SQUARE_MAX_VELOCITY;
+        game_data->rotation_velocity += fdt * acceleration;
+    } else {
+        game_data->rotation_velocity += fdt * SQUARE_ACCELERATION * 
+            (float)game_data->direction;
+    }
+
+    game_data->rotation_velocity = max(
+        min(
+            game_data->rotation_velocity,
+            SQUARE_MAX_VELOCITY
+        ),
+        -1.0f * SQUARE_MAX_VELOCITY
+    );
+
+    game_data->rotation_angle += game_data->rotation_velocity * fdt;
+
+    if (game_data->rotation_angle >= 2.0f * AVEN_GLM_PI_F) {
+        game_data->rotation_angle -= 2.0f * AVEN_GLM_PI_F;
+    }
+    if (game_data->rotation_angle < 0.0f) {
+        game_data->rotation_angle += 2.0f * AVEN_GLM_PI_F;
     }
 }
 

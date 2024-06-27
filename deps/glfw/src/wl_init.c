@@ -264,7 +264,7 @@ static const struct wl_callback_listener libdecorReadyListener =
 
 // Create key code translation tables
 //
-static void createKeyTables(void)
+static void createWLKeyTables(void)
 {
     memset(_glfw.wl.keycodes, -1, sizeof(_glfw.wl.keycodes));
     memset(_glfw.wl.scancodes, -1, sizeof(_glfw.wl.scancodes));
@@ -828,7 +828,7 @@ int _glfwInitWayland(void)
     _glfw.wl.registry = wl_display_get_registry(_glfw.wl.display);
     wl_registry_add_listener(_glfw.wl.registry, &registryListener, NULL);
 
-    createKeyTables();
+    createWLKeyTables();
 
     _glfw.wl.xkb.context = xkb_context_new(0);
     if (!_glfw.wl.xkb.context)

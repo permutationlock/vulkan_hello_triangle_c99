@@ -498,7 +498,7 @@ static void setIdleInhibitor(_GLFWwindow* window, GLFWbool enable)
 
 // Make the specified window and its video mode active on its monitor
 //
-static void acquireMonitor(_GLFWwindow* window)
+static void acquireWLMonitor(_GLFWwindow* window)
 {
     if (window->wl.libdecor.frame)
     {
@@ -519,7 +519,7 @@ static void acquireMonitor(_GLFWwindow* window)
 
 // Remove the window and restore the original video mode
 //
-static void releaseMonitor(_GLFWwindow* window)
+static void releaseWLMonitor(_GLFWwindow* window)
 {
     if (window->wl.libdecor.frame)
         libdecor_frame_unset_fullscreen(window->wl.libdecor.frame);
@@ -2517,12 +2517,12 @@ void _glfwSetWindowMonitorWayland(_GLFWwindow* window,
     }
 
     if (window->monitor)
-        releaseMonitor(window);
+        releaseWLMonitor(window);
 
     _glfwInputWindowMonitor(window, monitor);
 
     if (window->monitor)
-        acquireMonitor(window);
+        acquireWLMonitor(window);
     else
         _glfwSetWindowSizeWayland(window, width, height);
 }

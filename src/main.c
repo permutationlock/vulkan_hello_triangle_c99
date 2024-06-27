@@ -2517,6 +2517,9 @@ void timestep_update(GameData *game_data) {
     }
 }
 
+int64_t elapsed = 0;
+int64_t min_dt = 1000000000;
+
 static int main_loop(
     VulkanApp *app,
     Arena *swapchain_arena,
@@ -2544,10 +2547,10 @@ static int main_loop(
 
         int64_t delta_time = timespec_diff(&now, &last_update) + remainder;
         while (delta_time >= TIMESTEP_NS) {
-            last_update = now;
             delta_time -= TIMESTEP_NS;
             timestep_update(&app->game_data);
         }
+        last_update = now;
         remainder = delta_time;
 
         glfwPollEvents();
